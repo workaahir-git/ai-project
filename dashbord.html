@@ -1,30 +1,367 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FitForge — Workout & Diet Plan Generator</title>
+<style>
+  :root {
+    --bg: #f1faf5;
+    --fg: #1d2b2b;
+    --muted: #5b6e6a;
+    --card: #ffffff;
+    --border: #d9e7e1;
+    --primary: #1f8a70;
+    --primary-2: #4fc28a;
+    --accent: #b8e063;
+    --danger: #d6453d;
+    --success: #2f9e6b;
+    --grad-primary: linear-gradient(135deg, #1f8a70, #4fc28a);
+    --grad-hero: linear-gradient(135deg, #1f8a70 0%, #2fa57f 45%, #b8e063 100%);
+    --grad-heading: linear-gradient(135deg, #136b62, #2f9e6b);
+    --grad-warm: linear-gradient(135deg, #e8743b, #f0b24a);
+    --shadow-glow: 0 18px 50px -18px rgba(31,138,112,.55);
+    --shadow-card: 0 12px 40px -22px rgba(20,60,50,.45);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Decorative floating blobs */
+  .blobs { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(80px); }
+  .blob.a { width: 380px; height: 380px; top: -90px; left: -90px; background: var(--grad-hero); opacity: .28; animation: float1 14s ease-in-out infinite; }
+  .blob.b { width: 460px; height: 460px; top: 160px; right: -130px; background: var(--grad-warm); opacity: .2; animation: float2 18s ease-in-out infinite; }
+  .blob.c { width: 320px; height: 320px; bottom: -80px; left: 35%; background: var(--grad-primary); opacity: .16; animation: float1 16s ease-in-out infinite; }
+
+  @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(14px,-26px); } }
+  @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-18px,22px); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pop { 0% { opacity: 0; transform: scale(.92); } 60% { opacity: 1; transform: scale(1.03); } 100% { transform: scale(1); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 16px; }
+
+  /* Hero */
+  header { text-align: center; margin-bottom: 32px; animation: fadeUp .55s cubic-bezier(.16,1,.3,1) both; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid rgba(31,138,112,.25); background: #e3f5ec;
+    color: var(--primary); font-size: 12px; font-weight: 700;
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 16px;
+  }
+  h1 {
+    font-size: 2.2rem; font-weight: 800; margin: 0; letter-spacing: -.5px;
+    background: var(--grad-heading); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { color: var(--muted); max-width: 420px; margin: 12px auto 0; font-size: 14px; }
+
+  /* Cards */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px; margin-bottom: 20px;
+    box-shadow: var(--shadow-card);
+    animation: fadeUp .55s cubic-bezier(.16,1,.3,1) both;
+    transition: transform .3s cubic-bezier(.16,1,.3,1), box-shadow .3s ease;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 18px 50px -22px rgba(20,60,50,.5); }
+  .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .icon {
+    width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+    background: #e3f5ec; color: var(--primary); font-size: 18px;
+  }
+  .card-head h3 { margin: 0; font-size: 1rem; }
+
+  .grid { display: grid; gap: 12px; }
+  .grid.c2 { grid-template-columns: 1fr 1fr; }
+  .grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 560px) { .grid.c2, .grid.c3 { grid-template-columns: 1fr; } }
+
+  label.lbl { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%; padding: 9px 12px; font-size: 14px; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 10px; background: #fff; outline: none;
+    transition: border-color .2s, box-shadow .2s; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(31,138,112,.18); }
+  textarea { resize: vertical; min-height: 64px; }
+
+  /* BMI banner */
+  .bmi {
+    display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
+    background: var(--grad-primary); color: #fff;
+    border-radius: 12px; padding: 12px 18px; margin: 12px 0;
+    box-shadow: var(--shadow-glow); animation: pop .3s cubic-bezier(.16,1,.3,1);
+  }
+  .bmi small { display: block; font-size: 11px; opacity: .85; }
+  .bmi b { font-size: 1.3rem; }
+
+  /* Range */
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; height: 8px; padding: 0; border: none;
+    border-radius: 999px; background: linear-gradient(to right, var(--primary), var(--accent)); cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--primary); box-shadow: var(--shadow-glow); transition: transform .15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid var(--primary); }
+
+  /* Chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip-box { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); background: #f3faf6; border-radius: 12px; padding: 12px; }
+  .chip {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    transition: all .2s; animation: pop .3s cubic-bezier(.16,1,.3,1);
+  }
+  .chip:hover { transform: translateY(-2px); border-color: rgba(31,138,112,.5); color: var(--fg); }
+  .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: var(--shadow-glow); }
+
+  /* Submit */
+  .submit {
+    width: 100%; border: none; cursor: pointer; color: #fff;
+    background: var(--grad-hero); font-size: 14px; font-weight: 700;
+    padding: 14px; border-radius: 16px; box-shadow: var(--shadow-glow);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform .2s, filter .2s; animation: fadeUp .55s both;
+  }
+  .submit:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .submit:active { transform: scale(.99); }
+
+  /* Result */
+  .status { font-size: 12px; font-weight: 600; }
+  .status.success { color: var(--success); }
+  .status.error { color: var(--danger); }
+  .status .spin { display: inline-block; animation: spin 1s linear infinite; }
+  pre {
+    white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 16px;
+    font-size: 12px; line-height: 1.55; max-height: 380px; overflow: auto; margin: 0;
+  }
+  .mt { margin-top: 12px; }
+</style>
+</head>
 <body>
+  <div class="blobs"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
 
-<h1 id="welcome"></h1>
+  <div class="wrap">
+    <header>
+      <span class="badge">✨ Personalized for Indian gym-goers</span>
+      <h1>Workout &amp; Diet Plan Request</h1>
+      <p>Tell us about your body, goals, gym and diet — we'll forge a tailored plan request in seconds.</p>
+    </header>
 
-<script type="module">
-import { createClient }
-from 'https://esm.sh/@supabase/supabase-js'
+    <!-- BASICS -->
+    <div class="card" style="animation-delay:.08s">
+      <div class="card-head"><span class="icon">👤</span><h3>Basics</h3></div>
+      <div class="grid c3">
+        <div><label class="lbl">Name</label><input id="name" placeholder="Optional" /></div>
+        <div><label class="lbl">Age</label><input id="age" type="number" min="10" max="90" /></div>
+        <div><label class="lbl">Gender</label><select id="gender"><option>Male</option><option>Female</option><option>Other</option></select></div>
+      </div>
+      <div class="grid c3 mt">
+        <div><label class="lbl">Height (cm)</label><input id="height" type="number" placeholder="e.g. 172" /></div>
+        <div><label class="lbl">Weight (kg)</label><input id="weight" type="number" placeholder="e.g. 70" /></div>
+        <div><label class="lbl">Target weight (kg, optional)</label><input id="target" type="number" placeholder="e.g. 65" /></div>
+      </div>
+      <div id="bmiBox"></div>
+      <div class="mt"><label class="lbl">State / region in India (optional, helps pick familiar foods)</label><input id="region" placeholder="e.g. Gujarat, Punjab, Tamil Nadu" /></div>
+    </div>
 
-const supabase = createClient(
-  'YOUR_SUPABASE_URL',
-  'YOUR_SUPABASE_ANON_KEY'
-)
+    <!-- GOALS -->
+    <div class="card" style="animation-delay:.16s">
+      <div class="card-head"><span class="icon">🎯</span><h3>Goals &amp; activity</h3></div>
+      <div class="grid c2">
+        <div><label class="lbl">Primary goal</label><select id="goal"><option>Fat loss</option><option>Muscle gain</option><option>Body recomposition</option><option>Maintenance</option><option>Strength building</option><option>General fitness</option></select></div>
+        <div><label class="lbl">Training experience</label><select id="experience"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></div>
+      </div>
+      <div class="mt"><label class="lbl">Activity level (outside the gym)</label>
+        <select id="activity">
+          <option value="sedentary">Sedentary (desk job, little exercise)</option>
+          <option value="light">Lightly active (light exercise 1-3 days/week)</option>
+          <option value="moderate" selected>Moderately active (moderate exercise 3-5 days/week)</option>
+          <option value="very_active">Very active (hard exercise 6-7 days/week)</option>
+          <option value="extreme">Extremely active (physical job + training)</option>
+        </select>
+      </div>
+    </div>
 
-const {
-  data: { user }
-} = await supabase.auth.getUser()
+    <!-- WORKOUT -->
+    <div class="card" style="animation-delay:.24s">
+      <div class="card-head"><span class="icon">🏋️</span><h3>Workout preferences</h3></div>
+      <div class="grid c2">
+        <div><label class="lbl">Training days / week: <span id="daysVal">4</span></label><input id="days" type="range" min="2" max="6" step="1" value="4" /></div>
+        <div><label class="lbl">Session duration</label><select id="duration"><option>30-45 min</option><option selected>45-60 min</option><option>60-75 min</option><option>75-90 min</option></select></div>
+      </div>
+      <div class="mt"><label class="lbl">Equipment available at your gym (all selected by default — untick anything your gym doesn't have)</label>
+        <div class="chip-box"><div class="chips" id="equipChips"></div></div>
+      </div>
+    </div>
 
-if (!user)
-  location.href = 'login2.html'
+    <!-- DIET -->
+    <div class="card" style="animation-delay:.32s">
+      <div class="card-head"><span class="icon">🥗</span><h3>Diet preferences</h3></div>
+      <div class="grid c2">
+        <div><label class="lbl">Diet type</label><select id="diet"><option>Vegetarian</option><option>Eggetarian</option><option>Non-vegetarian</option><option>Vegan</option><option>Jain (no root vegetables)</option></select></div>
+        <div><label class="lbl">Meals per day: <span id="mealsVal">4</span></label><input id="meals" type="range" min="2" max="6" step="1" value="4" /></div>
+      </div>
+      <div class="grid c2 mt">
+        <div><label class="lbl">Meal rotation</label><select id="rotation"><option value="fixed">Same meals daily (easy to follow)</option><option value="short_rotation" selected>Rotate every 2-3 days</option><option value="weekly_rotation">Different meals every day of the week</option></select></div>
+        <div><label class="lbl">Daily food budget</label><select id="budget"><option value="low">Low (₹150-250/day on food)</option><option value="medium" selected>Medium (₹250-450/day)</option><option value="high">High (₹450+/day)</option></select></div>
+      </div>
+      <div class="mt"><label class="lbl">Allergies / intolerances</label><div class="chips" id="allergyChips"></div></div>
+      <div class="mt"><input id="otherAllergy" placeholder="Any other allergy or food to avoid (optional)" /></div>
+      <div class="mt"><label class="lbl">Other medical / dietary notes (optional)</label><textarea id="notes" placeholder="e.g. knee injury, thyroid condition, diabetic, intermittent fasting"></textarea></div>
+    </div>
 
-document.getElementById(
-  'welcome'
-).textContent =
-  `Welcome ${user.email}`
+    <button class="submit" style="animation-delay:.4s" onclick="handleSubmit()">📈 Generate plan request</button>
+
+    <div class="card mt" id="resultCard" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:1rem">Generated prompt</h3>
+        <span class="status" id="status"></span>
+      </div>
+      <pre id="output"></pre>
+    </div>
+  </div>
+
+<script>
+  // ---- Config: replace with your actual backend route ----
+  const BACKEND_ENDPOINT = "PLACEHOLDER_BACKEND_ENDPOINT";
+
+  const EQUIPMENT = ["Barbell","Dumbbells","EZ curl bar","Flat bench","Incline/decline bench","Squat rack","Power rack / cage","Smith machine","Cable machine (dual stack)","Lat pulldown","Seated row machine","Leg press","Hack squat machine","Leg extension machine","Leg curl machine","Chest press machine","Shoulder press machine","Pec deck / chest fly machine","Assisted pull-up/dip machine","Pull-up bar","Dip station","Preacher curl bench","Hyperextension bench","Calf raise machine","Hip thrust machine / Smith setup","Cable crossover","Functional trainer","Kettlebells","Resistance bands","Battle ropes","Medicine balls","TRX / suspension trainer","Treadmill","Stationary bike / spin bike","Elliptical / cross-trainer","Rowing machine","Stair climber","Foam roller"];
+  const ALLERGIES = ["Lactose / dairy","Gluten / wheat","Peanuts / tree nuts","Soy","Eggs","Shellfish / seafood","None"];
+  const ACTIVITY = {sedentary:"Sedentary (desk job, little exercise)",light:"Lightly active (light exercise 1-3 days/week)",moderate:"Moderately active (moderate exercise 3-5 days/week)",very_active:"Very active (hard exercise 6-7 days/week)",extreme:"Extremely active (physical job + training)"};
+  const ROTATION = {fixed:"Same meals daily (easy to follow)",short_rotation:"Rotate every 2-3 days",weekly_rotation:"Different meals every day of the week"};
+  const BUDGET = {low:"Low (₹150-250/day on food)",medium:"Medium (₹250-450/day)",high:"High (₹450+/day)"};
+
+  const availableEquipment = new Set(EQUIPMENT);
+  const allergies = new Set();
+  const $ = (id) => document.getElementById(id);
+
+  // Render equipment chips + "Select all"
+  function renderEquip() {
+    const box = $("equipChips"); box.innerHTML = "";
+    EQUIPMENT.forEach(eq => {
+      const c = document.createElement("button");
+      c.className = "chip" + (availableEquipment.has(eq) ? " active" : "");
+      c.textContent = eq;
+      c.onclick = () => { availableEquipment.has(eq) ? availableEquipment.delete(eq) : availableEquipment.add(eq); renderEquip(); };
+      box.appendChild(c);
+    });
+    const all = availableEquipment.size === EQUIPMENT.length;
+    const toggle = document.createElement("button");
+    toggle.className = "chip" + (all ? " active" : "");
+    toggle.textContent = all ? "Clear all" : "Select all";
+    toggle.onclick = () => { all ? availableEquipment.clear() : EQUIPMENT.forEach(e => availableEquipment.add(e)); renderEquip(); };
+    box.appendChild(toggle);
+  }
+  function renderAllergies() {
+    const box = $("allergyChips"); box.innerHTML = "";
+    ALLERGIES.forEach(a => {
+      const c = document.createElement("button");
+      c.className = "chip" + (allergies.has(a) ? " active" : "");
+      c.textContent = a;
+      c.onclick = () => { allergies.has(a) ? allergies.delete(a) : allergies.add(a); renderAllergies(); };
+      box.appendChild(c);
+    });
+  }
+  renderEquip(); renderAllergies();
+
+  // BMI live
+  function computeBMI() {
+    const h = parseFloat($("height").value), w = parseFloat($("weight").value);
+    if (!h || !w) return null;
+    return Math.round((w / ((h/100)**2)) * 10) / 10;
+  }
+  function bmiCategory(b) { return b<18.5?"Underweight":b<25?"Normal":b<30?"Overweight":"Obese"; }
+  function renderBMI() {
+    const b = computeBMI(), box = $("bmiBox");
+    box.innerHTML = b===null ? "" :
+      `<div class="bmi"><div>🔥 <small>BMI</small><b>${b}</b></div><div><small>Category</small><b>${bmiCategory(b)}</b></div></div>`;
+  }
+  ["height","weight"].forEach(id => $(id).addEventListener("input", renderBMI));
+  $("days").addEventListener("input", e => $("daysVal").textContent = e.target.value);
+  $("meals").addEventListener("input", e => $("mealsVal").textContent = e.target.value);
+
+  function buildPrompt() {
+    const v = (id) => $(id).value;
+    const b = computeBMI();
+    const allergyList = [...allergies].filter(a => a !== "None");
+    if (v("otherAllergy").trim()) allergyList.push(v("otherAllergy").trim());
+    const noAllergies = allergies.has("None") && allergyList.length === 0;
+
+    const equipArr = [...availableEquipment];
+    const unselected = EQUIPMENT.filter(e => !availableEquipment.has(e));
+    let equipText;
+    if (availableEquipment.size === EQUIPMENT.length) equipText = "Full commercial gym access (all standard equipment available).";
+    else if (equipArr.length === 0) equipText = "No specific equipment confirmed — assume only bodyweight and any commonly available gym equipment, and call out clearly which equipment each exercise needs.";
+    else if (unselected.length > 0 && unselected.length <= equipArr.length) equipText = `Full commercial gym access except the following, which are NOT available: ${unselected.join(", ")}. Avoid prescribing exercises that require this missing equipment.`;
+    else equipText = `Available equipment: ${equipArr.join(", ")}. Do not prescribe exercises requiring equipment outside this list.`;
+
+    const lines = [
+      "Generate a detailed, personalized workout and diet plan for an Indian gym-goer with the following profile. Use Indian food items, regional dish names, and easily available Indian groceries throughout the diet plan. Output should be structured, practical, and ready to render on a dashboard.","",
+      "## Personal details",
+      `- Name: ${v("name") || "Not provided"}`,
+      `- Age: ${v("age") || "Not provided"}`,
+      `- Gender: ${v("gender")}`,
+      `- Height: ${v("height") ? v("height")+" cm" : "Not provided"}`,
+      `- Weight: ${v("weight") ? v("weight")+" kg" : "Not provided"}`,
+      b !== null ? `- BMI: ${b} (${bmiCategory(b)}) — calculated from height/weight, use this to inform calorie targets and pacing` : "- BMI: not calculable (missing height/weight)",
+      v("target") ? `- Target weight: ${v("target")} kg` : null,
+      v("region") ? `- Region/state in India: ${v("region")} (use regionally familiar foods where relevant)` : null, "",
+      "## Goals & activity",
+      `- Primary goal: ${v("goal")}`,
+      `- Activity level: ${ACTIVITY[v("activity")]}`,
+      `- Training experience: ${v("experience")}`, "",
+      "## Workout preferences",
+      `- Training days per week: ${v("days")}`,
+      `- Preferred session duration: ${v("duration")}`,
+      `- ${equipText}`,
+      `- Default context: regular gym-goer, so structure the split (e.g. push/pull/legs, upper/lower, full body) appropriately for ${v("days")} days/week at ${v("experience").toLowerCase()} level.`, "",
+      "## Diet preferences",
+      `- Diet type: ${v("diet")}`,
+      `- Meals per day: ${v("meals")}`,
+      `- Meal rotation: ${ROTATION[v("rotation")]}`,
+      `- Daily food budget: ${BUDGET[v("budget")]}`,
+      noAllergies ? "- Allergies/intolerances: none reported" : `- Allergies/intolerances: ${allergyList.join(", ") || "none reported"} — strictly exclude these and any obvious derivative ingredients`,
+      v("notes").trim() ? `- Other medical/dietary notes: ${v("notes").trim()}` : null, "",
+      "## Output requirements",
+      "- Provide a weekly workout schedule with exercises, sets, reps, and rest periods.",
+      "- Provide a daily meal plan matching the meal rotation preference, with Indian dishes, approximate portion sizes, and approximate calories/macros per meal.",
+      "- Keep all meals within the stated budget and diet type, and fully avoid listed allergens.",
+      "- Briefly explain the reasoning behind the calorie and macro targets based on the BMI, goal, and activity level.",
+      "- Format the response so it can be parsed into a dashboard view (clear headings per day, consistent structure)."
+    ];
+    return { promptText: lines.filter(l => l !== null).join("\n"), bmi: b };
+  }
+
+  async function handleSubmit() {
+    const { promptText, bmi } = buildPrompt();
+    $("resultCard").style.display = "block";
+    $("output").textContent = promptText;
+    const s = $("status");
+    s.className = "status"; s.innerHTML = '<span class="spin">⏳</span> Sending to backend…';
+    try {
+      const res = await fetch(BACKEND_ENDPOINT, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText, bmi })
+      });
+      if (!res.ok) throw new Error();
+      s.className = "status success"; s.textContent = "✓ Sent successfully";
+    } catch {
+      s.className = "status error"; s.textContent = "Backend not reachable (expected until you wire up your endpoint)";
+    }
+  }
 </script>
-
 </body>
 </html>
