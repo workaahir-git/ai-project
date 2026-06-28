@@ -238,9 +238,8 @@ const supabase = createClient(
 // time you restart ngrok on the free tier, so update this line each session.
 // PRODUCTION (later): replace with your real server's URL — no other
 // code changes needed anywhere else in this file.
-const BACKEND_ENDPOINT = "https://crinkle-accent-thursday.ngrok-free.dev/api/generate"
+const BACKEND_ENDPOINT = "https://crinkle-accent-thursday.ngrok-free.dev/api/genrate"
 
-// Make supabase + session available to the non-module script below
 window.__supabase = supabase
 
 // ---- Auth guard: redirect to login if not signed in ----
@@ -369,45 +368,61 @@ function buildPrompt() {
   return { promptText: lines.filter(l => l !== null).join("\n"), bmi: b };
 }
 
-async function handleSubmit() {
-  const { promptText, bmi } = buildPrompt();
+function handleSubmit() {
   const btn = $("submitBtn");
-  $("resultCard").style.display = "block";
-  $("output").textContent = "";
-  const s = $("status");
-  s.className = "status"; s.innerHTML = '<span class="spin">⏳</span> Generating your plan… this can take a minute on local Llama 3.1.';
+
+  // Build the base URL: same origin as the backend endpoint but at /result
+  const backendBase = BACKEND_ENDPOINT.replace(/\/api\/generate$/, "");
+  const resultUrl = backendBase + "/result";
+
+  // Show a loading state on the button
   btn.disabled = true;
+  btn.textContent = "⏳ Generating… this may take a minute";
 
-  try {
-    const token = await window.__getAccessToken();
-    if (!token) {
-      throw new Error("Not logged in — please log in again.");
-    }
+  // Collect allergies
+  const allergyList = [...allergies].filter(a => a !== "None");
+  if ($("otherAllergy").value.trim()) allergyList.push($("otherAllergy").value.trim());
 
-    const res = await fetch(window.__BACKEND_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-        "ngrok-skip-browser-warning": "true"
-      },
-      body: JSON.stringify({ prompt: promptText, bmi })
-    });
+  // Collect equipment
+  const equipList = [...availableEquipment];
 
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.detail || `Backend error (${res.status})`);
-    }
+  // All fields posted directly — main.py builds the profile from these
+  const fields = {
+    name:       $("name").value.trim() || "User",
+    age:        $("age").value || "25",
+    gender:     $("gender").value,
+    height:     $("height").value || "170",
+    weight:     $("weight").value || "70",
+    target:     $("target").value || "",
+    region:     $("region").value || "",
+    goal:       $("goal").value,
+    experience: $("experience").value,
+    activity:   $("activity").value,
+    days:       $("days").value,
+    duration:   $("duration").value,
+    diet:       $("diet").value,
+    meals:      $("meals").value,
+    budget:     $("budget").value,
+    notes:      $("notes").value.trim(),
+    allergies:  allergyList.join(", ") || "none",
+    equipment:  equipList.join(", ") || "full gym",
+  };
 
-    const data = await res.json();
-    $("output").textContent = data.result || "(empty response from model)";
-    s.className = "status success"; s.textContent = "✓ Plan generated";
-  } catch (err) {
-    $("output").textContent = promptText + "\n\n---\n(Plan generation failed — showing your request instead. See status message above.)";
-    s.className = "status error"; s.textContent = "✗ " + err.message;
-  } finally {
-    btn.disabled = false;
+  // Create a hidden form and POST — browser navigates to the rendered result page
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = resultUrl;
+
+  for (const [key, val] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = val;
+    form.appendChild(input);
   }
+
+  document.body.appendChild(form);
+  form.submit();
 }
 </script>
 </body>
