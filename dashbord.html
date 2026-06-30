@@ -719,9 +719,9 @@ async function handleSubmit() {
     }
 
     out.style.display = "none";
-    frame.srcdoc = html;
-    frame.style.display = "block";
-    s.className = "status success"; s.textContent = "✓ Plan generated successfully";
+    s.className = "status success"; s.textContent = "✓ Plan generated — redirecting…";
+    sessionStorage.setItem("fitforge_plan_html", html);
+    window.location.href = "result.html";
 
   } catch (err) {
     out.style.display = "block";
