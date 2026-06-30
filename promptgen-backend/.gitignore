@@ -1,0 +1,6 @@
+.env
+*.env
+pycache/
+*.pyc
+get-pip.py
+venv/
