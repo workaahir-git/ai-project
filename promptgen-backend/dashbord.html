@@ -99,7 +99,6 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
     <div><label class="lbl">Target weight (kg)</label><input id="target" type="number" placeholder="e.g. 65" /></div>
   </div>
   <div id="bmiBox"></div>
-  <div id="macroBox"></div>
   <div class="mt"><label class="lbl">State / region in India (helps pick familiar foods)</label><input id="region" placeholder="e.g. Gujarat, Punjab, Tamil Nadu, Maharashtra" /></div>
 </div>
 
@@ -118,7 +117,7 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
       </select>
     </div>
     <div><label class="lbl">Training experience</label>
-      <select id="experience" onchange="updateMacros()">
+      <select id="experience">
         <option>Beginner</option>
         <option>Intermediate</option>
         <option>Advanced</option>
@@ -160,7 +159,7 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
   <div class="card-head"><span class="icon">🥗</span><h3>Diet preferences</h3></div>
   <div class="grid c2">
     <div><label class="lbl">Diet type</label>
-      <select id="diet" onchange="updateMacros()">
+      <select id="diet">
         <option>Vegetarian</option>
         <option>Eggetarian</option>
         <option>Non-vegetarian</option>
@@ -198,13 +197,14 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
     <h3 style="margin:0;font-size:1rem">Generated prompt (sent to AI)</h3>
     <span class="status" id="status"></span>
   </div>
+  <div id="macroBox" style="margin-bottom:12px"></div>
   <pre id="output"></pre>
 </div>
 
 </div>
 
 <script>
-const BACKEND_ENDPOINT = "PLACEHOLDER_BACKEND_ENDPOINT";
+const BACKEND_ENDPOINT = "https://ai-project-login.onrender.com";
 
 const EQUIPMENT = ["Barbell","Dumbbells","EZ curl bar","Flat bench","Incline/decline bench","Squat rack","Power rack / cage","Smith machine","Cable machine (dual stack)","Lat pulldown","Seated row machine","Leg press","Hack squat machine","Leg extension machine","Leg curl machine","Chest press machine","Shoulder press machine","Pec deck / chest fly machine","Assisted pull-up/dip machine","Pull-up bar","Dip station","Preacher curl bench","Hyperextension bench","Calf raise machine","Hip thrust machine / Smith setup","Cable crossover","Functional trainer","Kettlebells","Resistance bands","Battle ropes","Medicine balls","TRX / suspension trainer","Treadmill","Stationary bike / spin bike","Elliptical / cross-trainer","Rowing machine","Stair climber","Foam roller"];
 const ALLERGIES = ["Lactose / dairy","Gluten / wheat","Peanuts / tree nuts","Soy","Eggs","Shellfish / seafood","None"];
@@ -318,7 +318,7 @@ function renderMacros() {
 
 ["height","weight","age","gender","activity","goal","experience"].forEach(id => {
   const el = $(id);
-  if (el) el.addEventListener("input", () => { renderBMI(); renderMacros(); });
+  if (el) el.addEventListener("input", () => { renderBMI(); });
 });
 
 $("days").addEventListener("input", e => $("daysVal").textContent = e.target.value);
@@ -569,13 +569,16 @@ notes
 "",
 "For each day provide:",
 `  Meal 1 / Meal 2 / … / Meal ${meals} — each with:`,
-"    - Indian dish name and description",
-"    - Ingredients with quantities (grams/cups/pieces as appropriate)",
-"    - Calories | Protein | Carbs | Fat",
-"    - Prep tip or cooking method (tadka, tawa-cooked, pressure cooker, etc.)",
-"  Pre-workout meal: if training day, specify which meal is pre-workout and timing",
-"  Post-workout meal: specify which meal is post-workout and why",
-"  Day total: Calories | Protein | Carbs | Fat",
+"    - Indian dish name",
+"    - Ingredients listed individually with exact quantity (grams/cups/pieces)",
+"    - For EACH ingredient: Calories | Protein (g) | Carbs (g) | Fat (g)",
+"    - Meal subtotal: Calories | Protein (g) | Carbs (g) | Fat (g)",
+"    - Prep tip or cooking method (tadka, tawa, pressure cooker, etc.)",
+"  Pre-workout meal: label which meal this is and ideal timing before training",
+"  Post-workout meal: label which meal this is and why it fits recovery",
+"  ── Day Total ──: Calories | Protein (g) | Carbs (g) | Fat (g)",
+"  IMPORTANT: Show macros at ingredient level AND meal level AND day total.",
+"  Users want to see exactly what each food contributes — do not just show a meal total.",
 `Note: Every meal must respect ${dietType} restrictions. No ${dietRules.forbidden}.`,
 `Every breakfast must come from: ${dietRules.breakfastOptions}`,
 "",
@@ -633,6 +636,7 @@ expRules.dropSets !== "Not recommended at beginner level — prioritise learning
 async function handleSubmit() {
   const { promptText, bmi, macros } = buildPrompt();
   $("resultCard").style.display = "block";
+  renderMacros();
   $("output").textContent = promptText;
   const s = $("status");
   s.className = "status"; s.innerHTML = '<span class="spin">⏳</span> Sending to backend…';
