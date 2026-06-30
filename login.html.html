@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GymCoach Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    min-height: 100vh;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 32px 28px;
+    box-shadow: 0 4px 24px #0000000a;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+    justify-content: center;
+  }
+
+  .logo-icon {
+    width: 38px;
+    height: 38px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-text span { color: #1d4ed8; }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 28px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 9px;
+    border: none;
+    background: none;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.2px;
+  }
+
+  .tab.active {
+    background: #1d4ed8;
+    color: #ffffff;
+  }
+
+  /* FORM HEADING */
+  .form-heading {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 4px;
+    letter-spacing: -0.4px;
+  }
+
+  .form-sub {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 24px;
+  }
+
+  /* INPUTS */
+  .field {
+    margin-bottom: 14px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .field input {
+    width: 100%;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #0f172a;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .field input::placeholder { color: #cbd5e1; }
+
+  .field input:focus {
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 3px #1d4ed820;
+  }
+
+  /* BUTTON */
+  .btn {
+    width: 100%;
+    padding: 13px;
+    background: #1e293b;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    margin-top: 8px;
+    transition: background 0.2s, transform 0.1s;
+    letter-spacing: 0.2px;
+  }
+
+  .btn:hover { background: #334155; }
+  .btn:active { transform: scale(0.98); }
+
+  /* SWITCH LINK */
+  .switch-text {
+    text-align: center;
+    font-size: 13px;
+    color: #94a3b8;
+    margin-top: 20px;
+  }
+
+  .switch-text span {
+    color: #1d4ed8;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .switch-text span:hover { text-decoration: underline; }
+
+  /* ERROR */
+  .error-msg {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #ef4444;
+    margin-bottom: 14px;
+    display: none;
+  }
+
+  .btn.loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+
+<body>
+<div class="card">
+
+  <div class="logo">
+    <div class="logo-icon">💪</div>
+    <div class="logo-text">GymCoach <span>Studio</span></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" id="loginTab">Login</button>
+    <button class="tab" id="signupTab">Sign Up</button>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-msg" id="errorMsg"></div>
+
+  <!-- LOGIN FORM -->
+  <div id="loginForm">
+    <div class="form-heading">Welcome back</div>
+    <div class="form-sub">Log in to your gym dashboard</div>
+
+    <div class="field">
+      <label>Email</label>
+      <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label>Password</label>
+      <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="btn" id="loginBtn">Log in</button>
+
+    <div class="switch-text">
+      No account? <span id="goSignup">Create one</span>
+    </div>
+  </div>
+
+  <!-- SIGNUP FORM -->
+  <div id="signupForm" style="display:none">
+    <div class="form-heading">Create account</div>
+    <div class="form-sub">Start your gym's AI coaching journey</div>
+
+    <div class="field">
+      <label>Username</label>
+      <input id="signupUsername" type="text" placeholder="Your gym name">
+    </div>
+
+    <div class="field">
+      <label>Email</label>
+      <input id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label>Password</label>
+      <input id="signupPassword" type="password" placeholder="Min. 6 characters">
+    </div>
+
+    <div class="field">
+      <label>Confirm Password</label>
+      <input id="confirmPassword" type="password" placeholder="Repeat password">
+    </div>
+
+    <button class="btn" id="signupBtn">Create Account</button>
+
+    <div class="switch-text">
+      Already have an account? <span id="goLogin">Log in</span>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js'
+
+const supabase = createClient(
+  'https://yabclxadadynmprymcns.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
+)
+
+const loginForm  = document.getElementById('loginForm')
+const signupForm = document.getElementById('signupForm')
+const loginTab   = document.getElementById('loginTab')
+const signupTab  = document.getElementById('signupTab')
+const errorMsg   = document.getElementById('errorMsg')
+
+function showError(msg) {
+  errorMsg.textContent = msg
+  errorMsg.style.display = 'block'
+}
+
+function hideError() {
+  errorMsg.style.display = 'none'
+  errorMsg.textContent = ''
+}
+
+function showLogin() {
+  loginForm.style.display = 'block'
+  signupForm.style.display = 'none'
+  loginTab.classList.add('active')
+  signupTab.classList.remove('active')
+  hideError()
+}
+
+function showSignup() {
+  signupForm.style.display = 'block'
+  loginForm.style.display = 'none'
+  signupTab.classList.add('active')
+  loginTab.classList.remove('active')
+  hideError()
+}
+
+loginTab.addEventListener('click', showLogin)
+signupTab.addEventListener('click', showSignup)
+document.getElementById('goSignup').addEventListener('click', showSignup)
+document.getElementById('goLogin').addEventListener('click', showLogin)
+
+// LOGIN
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  hideError()
+  const email    = document.getElementById('loginEmail').value.trim()
+  const password = document.getElementById('loginPassword').value
+
+  if (!email || !password) { showError('Please fill in all fields'); return }
+
+  const btn = document.getElementById('loginBtn')
+  btn.textContent = 'Logging in...'
+  btn.classList.add('loading')
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+  btn.textContent = 'Log in'
+  btn.classList.remove('loading')
+
+  if (error) { showError(error.message); return }
+
+  window.location.href = 'dashbord.html'
+})
+
+// SIGNUP
+document.getElementById('signupBtn').addEventListener('click', async () => {
+  hideError()
+  const username        = document.getElementById('signupUsername').value.trim()
+  const email           = document.getElementById('signupEmail').value.trim()
+  const password        = document.getElementById('signupPassword').value
+  const confirmPassword = document.getElementById('confirmPassword').value
+
+  if (!username)                    { showError('Please enter a username'); return }
+  if (!email)                       { showError('Please enter an email'); return }
+  if (password.length < 6)         { showError('Password must be at least 6 characters'); return }
+  if (password !== confirmPassword) { showError('Passwords do not match'); return }
+
+  const btn = document.getElementById('signupBtn')
+  btn.textContent = 'Creating account...'
+  btn.classList.add('loading')
+
+  const { error } = await supabase.auth.signUp({ email, password })
+
+  btn.textContent = 'Create Account'
+  btn.classList.remove('loading')
+
+  if (error) { showError(error.message); return }
+
+  localStorage.setItem('username', username)
+  alert('Account created! Check your email to confirm.')
+  showLogin()
+})
+</script>
+</body>
+</html>
