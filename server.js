@@ -12,7 +12,7 @@ app.get("/", (req, res) => {
   res.send("GymCoach Studio backend is running.");
 });
 
-// Main route — receives prompt from dashbord.html, calls Grok, returns plan
+// Main route — receives prompt from dashbord.html, calls Groq, returns plan
 app.post("/api/generate", async (req, res) => {
   const { prompt } = req.body;
 
@@ -20,23 +20,25 @@ app.post("/api/generate", async (req, res) => {
     return res.status(400).json({ error: "No prompt provided." });
   }
 
-  const GROK_API_KEY = process.env.GROK_API_KEY;
-  
-console.log("KEY CHECK:", GROK_API_KEY ? `present, length ${GROK_API_KEY.length}` : "MISSING");
-  if (!GROK_API_KEY) {
-    return res.status(500).json({ error: "GROK_API_KEY not set in environment variables." });
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+  console.log("KEY CHECK:", GROQ_API_KEY ? `present, length ${GROQ_API_KEY.length}` : "MISSING");
+
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ error: "GROQ_API_KEY not set in environment variables." });
   }
 
   try {
-    const grokRes = await fetch("https://api.x.ai/v1/chat/completions", {
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${GROK_API_KEY}`,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "grok-3",          // swap to "grok-3-mini" for cheaper calls
+        model: "llama-3.3-70b-versatile", // matches the model already used by the Python/Groq backend
         max_tokens: 4000,
+        temperature: 0,
         messages: [
           {
             role: "system",
@@ -50,14 +52,14 @@ console.log("KEY CHECK:", GROK_API_KEY ? `present, length ${GROK_API_KEY.length}
       }),
     });
 
-    if (!grokRes.ok) {
-      const errText = await grokRes.text();
-      console.error("Grok API error:", errText);
-      return res.status(502).json({ error: "Grok API call failed.", detail: errText });
+    if (!groqRes.ok) {
+      const errText = await groqRes.text();
+      console.error("Groq API error:", errText);
+      return res.status(502).json({ error: "Groq API call failed.", detail: errText });
     }
 
-    const data = await grokRes.json();
-    const planText = data.choices?.[0]?.message?.content || "No response from Grok.";
+    const data = await groqRes.json();
+    const planText = data.choices?.[0]?.message?.content || "No response from Groq.";
 
     return res.json({ plan: planText });
 
