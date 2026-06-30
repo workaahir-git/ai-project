@@ -5,10 +5,10 @@ GEMINI_MODEL = "gemini-2.5-flash"
 
 
 async def generate_with_ollama(prompt: str, system: str | None = None) -> str:
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-        f"{GEMINI_MODEL}:generateContent?key={settings.gemini_api_key}"
-    )
+    url =(
+    f"https://generativelanguage.googleapis.com/v1beta/models/"
+    f"{GEMINI_MODEL}:generateContent?key={settings.gemini_api_key}"
+)
 
     body = {
         "contents": [
