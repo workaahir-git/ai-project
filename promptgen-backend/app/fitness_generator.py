@@ -145,6 +145,64 @@ EXERCISE_LIMITS = {
     "advanced":     {"max_exercises": 9, "max_sets": 5},
 }
 
+# ── WORKOUT SPLIT TABLE ──────────────────────────────────────────────────────
+# Previously the prompt just said "choose appropriate splits (e.g. Push/Pull/
+# Legs, Upper/Lower, Full-Body)" with no link to experience tier or training
+# days/week — so the LLM consistently defaulted to the easiest listed example,
+# Full Body, for EVERY day regardless of how many days were selected. This
+# table makes the split deterministic in code, same as the protein/calorie
+# numbers above, instead of leaving it to the model to infer.
+# Keys match WARMUP_LIBRARY so warmup selection lines up with the split.
+SPLIT_LABELS = {
+    "full":  "Full Body",
+    "upper": "Upper Body",
+    "lower": "Lower Body",
+    "push":  "Push (Chest / Shoulders / Triceps)",
+    "pull":  "Pull (Back / Biceps)",
+    "legs":  "Legs (Quads / Hamstrings / Glutes)",
+}
+
+SPLIT_TEMPLATES = {
+    "beginner": {
+        1: ["full"],
+        2: ["full", "full"],
+        3: ["full", "full", "full"],
+        4: ["upper", "lower", "upper", "lower"],
+        5: ["upper", "lower", "full", "upper", "lower"],
+        6: ["upper", "lower", "full", "upper", "lower", "full"],
+        7: ["upper", "lower", "full", "upper", "lower", "full", "upper"],
+    },
+    "intermediate": {
+        1: ["full"],
+        2: ["upper", "lower"],
+        3: ["push", "pull", "legs"],
+        4: ["upper", "lower", "upper", "lower"],
+        5: ["push", "pull", "legs", "upper", "lower"],
+        6: ["push", "pull", "legs", "push", "pull", "legs"],
+        7: ["push", "pull", "legs", "upper", "lower", "push", "pull"],
+    },
+    "advanced": {
+        1: ["full"],
+        2: ["upper", "lower"],
+        3: ["push", "pull", "legs"],
+        4: ["upper", "lower", "upper", "lower"],
+        5: ["push", "pull", "legs", "upper", "lower"],
+        6: ["push", "pull", "legs", "push", "pull", "legs"],
+        7: ["push", "pull", "legs", "push", "pull", "legs", "upper"],
+    },
+}
+
+
+def _resolve_split_sequence(exp_key: str, days_per_week: int) -> list:
+    """
+    Deterministic ordered list of split keys (one per training day) for the
+    given experience tier + training frequency. Clamps days_per_week into
+    1-7 so an out-of-range form value can't KeyError.
+    """
+    days = max(1, min(7, int(days_per_week)))
+    table = SPLIT_TEMPLATES.get(exp_key, SPLIT_TEMPLATES["intermediate"])
+    return table.get(days, table[min(table.keys(), key=lambda d: abs(d - days))])
+
 # Machine/cable/dumbbell-safe compound movements, keyed by muscle group. This is
 # the single source of truth for the "COMPOUND MOVEMENT LIBRARY" block injected
 # into the prompt AND for _is_compound_exercise() below (used when trimming a
@@ -558,6 +616,11 @@ def build_user_prompt(profile: dict) -> str:
 
     # ── 5. Warmup hints per training days
     training_days_per_week = int(profile.get("days_per_week", 4))
+    split_sequence = _resolve_split_sequence(exp_key, training_days_per_week)
+    split_plan_lines = "\n".join(
+        f"  Training day {i + 1} → {SPLIT_LABELS[s]}"
+        for i, s in enumerate(split_sequence)
+    )
     duration    = profile.get("session_duration", "45–60 min")
     region      = profile.get("region", "India")
     budget      = profile.get("budget", "medium")
@@ -640,7 +703,15 @@ The sum of kcal must be within ±80 kcal of {m['target_kcal']}.
 ━━ WORKOUT ━━
 Client experience level: {profile.get('experience', 'Intermediate')} → training rigour MUST match this tier, not a generic plan.
 Design exactly {training_days_per_week} training days and {7 - training_days_per_week} rest day(s) per week.
-Goal is {goal} → choose appropriate splits (e.g. Push/Pull/Legs, Upper/Lower, Full-Body).
+
+WORKOUT SPLIT — MANDATORY, ALREADY DECIDED, DO NOT CHANGE IT:
+This exact split was computed for a {exp_key} lifter training {training_days_per_week} day(s)/week.
+Use it in this order for the training days (place rest day(s) wherever makes sense across the week,
+e.g. spaced out or at the end — only the TRAINING-day split order below is fixed):
+{split_plan_lines}
+Do NOT default every training day to Full Body — only use Full Body where this list says so.
+Each day's "type" and "name" fields should reflect the split shown above for that day
+(e.g. "Push Day — Chest · Shoulders · Triceps" for a Push day, "Upper Body — ..." for an Upper day).
 Session duration is {duration} — size the exercise volume accordingly.
 Avoid free-weight barbell squat, deadlift, barbell bench press, overhead barbell press (injury risk) —
 use the machine/cable/dumbbell compound equivalents listed below instead.
