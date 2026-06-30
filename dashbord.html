@@ -77,24 +77,30 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
 </head>
 <body>
 <script type="module">
-  import { createClient } from 'https://esm.sh/@supabase/supabase-js'
+  try {
+    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
 
-  const supabase = createClient(
-    'https://yabclxadadynmprymcns.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
-  )
+    const supabase = createClient(
+      'https://yabclxadadynmprymcns.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
+    )
 
-  // Guard: bounce to login if there's no active session
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
-    window.location.href = 'login.html.html'
-  }
-
-  // Expose what the rest of the page (classic script below) needs
-  window.__supabase = supabase
-  window.__getAccessToken = async () => {
+    // Guard: bounce to login if there's no active session
     const { data: { session } } = await supabase.auth.getSession()
-    return session ? session.access_token : null
+    if (!session) {
+      window.location.href = 'login.html.html'
+    }
+
+    // Expose what the rest of the page (classic script below) needs
+    window.__supabase = supabase
+    window.__getAccessToken = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      return session ? session.access_token : null
+    }
+    window.__supabaseReady = true
+  } catch (err) {
+    console.error('Supabase failed to load:', err)
+    window.__supabaseReady = false
   }
 </script>
 <div class="blobs"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
@@ -695,6 +701,9 @@ async function handleSubmit() {
   });
 
   try {
+    if (typeof window.__getAccessToken !== "function") {
+      throw new Error("Auth system failed to load — check your connection and refresh the page.");
+    }
     const token = await window.__getAccessToken();
     if (!token) {
       throw new Error("Your session expired — please log in again.");
