@@ -11,7 +11,7 @@ async def generate_with_ollama(prompt: str, system: str | None = None) -> str:
     async with httpx.AsyncClient(timeout=180.0) as client:
         try:
             resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
+                "curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
                 headers={
                     "Authorization": f"Bearer {settings.groq_api_key}",
                     "Content-Type": "application/json",
