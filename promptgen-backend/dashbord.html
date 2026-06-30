@@ -721,7 +721,7 @@ async function handleSubmit() {
     out.style.display = "none";
     s.className = "status success"; s.textContent = "✓ Plan generated — redirecting…";
     sessionStorage.setItem("fitforge_plan_html", html);
-    window.location.href = "promptgen-backend/Templates/result.html";
+    window.location.href = "result.html";
 
   } catch (err) {
     out.style.display = "block";
