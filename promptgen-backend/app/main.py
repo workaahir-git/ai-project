@@ -37,6 +37,12 @@ class ManualCORS(BaseHTTPMiddleware):
 app = FastAPI(title="Prompt Generator API")
 app.add_middleware(ManualCORS)
 
+print("Gemini key loaded:", bool(settings.gemini_api_key))
+print(
+    "Gemini key prefix:",
+    settings.gemini_api_key[:5] if settings.gemini_api_key else "NONE"
+)
+
 
 @app.get("/health")
 def health():
