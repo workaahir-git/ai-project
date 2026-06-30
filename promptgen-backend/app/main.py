@@ -137,7 +137,7 @@ async def result_page(
 
     try:
         data = parse_llm_json(raw)
-        data = enforce_schema(data)
+        data = enforce_schema(data, profile)
         html = render_dashboard(data)
     except (ValueError, Exception) as e:
         return HTMLResponse(

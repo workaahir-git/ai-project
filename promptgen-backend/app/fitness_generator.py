@@ -34,9 +34,13 @@ TEMPLATE_FILE = "result.html"
 # Keys match the <select> values in dashbord.html  (Beginner / Intermediate / Advanced)
 # These are the OUTER bounds for each tier. The actual multiplier used is computed
 # dynamically within this band based on activity level + BMI — see _protein_multiplier().
+# NOTE: this is the single source of truth for these numbers. dashbord.html (both
+# copies — root and promptgen-backend/) has its OWN duplicate PROTEIN_RANGE /
+# PROTEIN_MIDPOINT constants used only for the client-side preview card; keep them
+# in sync with this table by hand whenever it changes.
 PROTEIN_MULTIPLIER = {
-    "beginner":     (1.0, 1.1),    # g of protein per kg of body-weight
-    "intermediate": (1.2, 1.4),
+    "beginner":     (1.0, 1.0),    # g of protein per kg of body-weight — flat, not a band
+    "intermediate": (1.1, 1.3),
     "advanced":     (1.5, 2.0),
 }
 
@@ -49,6 +53,21 @@ _ACTIVITY_PROTEIN_SCORE = {
     "very_active": 0.75,
     "extreme":     1.0,
 }
+
+
+def _resolve_exp_key(experience_raw: str) -> str:
+    """
+    Single source of truth for turning a free-text experience value (from the
+    form, e.g. "Beginner") into one of the PROTEIN_MULTIPLIER / EXERCISE_VOLUME
+    keys. Previously this prefix-matching logic was copy-pasted in three
+    different places (_calculate_macros, build_user_prompt, enforce_schema)
+    and could drift out of sync with each other — now there's one place to fix.
+    """
+    exp_raw = (experience_raw or "intermediate").lower().strip()
+    for k in PROTEIN_MULTIPLIER:
+        if exp_raw.startswith(k[:3]):   # beg / int / adv prefix match
+            return k
+    return "intermediate"
 
 
 def _bmi_protein_score(bmi: float) -> float:
@@ -114,6 +133,75 @@ EXERCISE_VOLUME = {
         ),
     },
 }
+
+# Hard numeric ceilings derived from EXERCISE_VOLUME above. The LLM is *told* to
+# respect EXERCISE_VOLUME via the prompt, but prompt instructions aren't
+# guaranteed to be followed — this table is enforced in code (see enforce_schema)
+# as a backstop so a beginner can never actually end up with an advanced-volume
+# workout even if the model ignores the instructions.
+EXERCISE_LIMITS = {
+    "beginner":     {"max_exercises": 5, "max_sets": 3},
+    "intermediate": {"max_exercises": 7, "max_sets": 4},
+    "advanced":     {"max_exercises": 9, "max_sets": 5},
+}
+
+# Machine/cable/dumbbell-safe compound movements, keyed by muscle group. This is
+# the single source of truth for the "COMPOUND MOVEMENT LIBRARY" block injected
+# into the prompt AND for _is_compound_exercise() below (used when trimming a
+# day's exercise list so compound lifts are never the ones cut to make room).
+COMPOUND_MOVEMENT_LIBRARY = {
+    "Legs": [
+        "Leg Press", "Hack Squat Machine", "Smith Machine Squat",
+        "Goblet Squat (dumbbell)", "Walking Lunges (dumbbell)",
+        "Romanian Deadlift (dumbbell)",
+    ],
+    "Back": [
+        "Lat Pulldown", "Seated Cable Row", "Chest-Supported Machine Row",
+        "Assisted Pull-up", "Single-Arm Dumbbell Row",
+    ],
+    "Chest": [
+        "Machine Chest Press", "Incline Dumbbell Press", "Flat Dumbbell Press",
+        "Smith Machine Bench Press",
+    ],
+    "Shoulders": [
+        "Machine Shoulder Press", "Seated Dumbbell Press", "Arnold Press",
+    ],
+}
+_COMPOUND_NAMES_LOWER = [
+    n.lower() for names in COMPOUND_MOVEMENT_LIBRARY.values() for n in names
+]
+
+
+def _is_compound_exercise(ex: dict) -> bool:
+    """
+    Best-effort check for whether an exercise object is a compound movement,
+    using the COMPOUND_MOVEMENT_LIBRARY names. Bidirectional substring match so
+    it still recognises e.g. "Romanian Deadlift" against the library's "Romanian
+    Deadlift (dumbbell)", or vice versa, without needing an exact string match.
+    """
+    name = str(ex.get("name", "")).lower().strip()
+    if not name:
+        return False
+    return any(c in name or name in c for c in _COMPOUND_NAMES_LOWER)
+
+
+def _trim_preserving_compounds(exercises: list, max_n: int) -> list:
+    """
+    Trim an exercise list down to max_n entries WITHOUT dropping compound
+    movements first — compound lifts are kept, isolation work is cut to make
+    room, and original relative ordering (compound → isolation, largest
+    muscle → smallest) is preserved.
+    """
+    if len(exercises) <= max_n:
+        return exercises
+    compound_idx = [i for i, ex in enumerate(exercises) if _is_compound_exercise(ex)]
+    other_idx = [i for i in range(len(exercises)) if i not in compound_idx]
+    keep_idx = set(compound_idx[:max_n])  # if compounds alone exceed max_n, cap there too
+    for i in other_idx:
+        if len(keep_idx) >= max_n:
+            break
+        keep_idx.add(i)
+    return [exercises[i] for i in sorted(keep_idx)]
 
 # ── DIET RESTRICTION TOKENS ───────────────────────────────────────────────────
 # Hard tokens injected into the prompt so the model cannot misread the setting.
@@ -221,11 +309,7 @@ def _calculate_macros(profile: dict) -> dict:
     bmi = weight / (height_m ** 2) if height_m > 0 else 22.0
 
     # Protein multiplier band + dynamic single value within it
-    exp_key = "intermediate"
-    for k in PROTEIN_MULTIPLIER:
-        if experience.startswith(k[:3]):   # beg / int / adv prefix match
-            exp_key = k
-            break
+    exp_key = _resolve_exp_key(experience)
     p_low, p_high = PROTEIN_MULTIPLIER[exp_key]
     p_dynamic = _protein_multiplier(exp_key, profile.get("activity_key", "moderate"), bmi)
     protein_g_low  = math.ceil(weight * p_low)
@@ -464,12 +548,7 @@ def build_user_prompt(profile: dict) -> str:
             break
 
     # ── 4. Experience token
-    exp_raw = profile.get("experience", "intermediate").lower()
-    exp_key = "intermediate"
-    for k in PROTEIN_MULTIPLIER:
-        if exp_raw.startswith(k[:3]):
-            exp_key = k
-            break
+    exp_key = _resolve_exp_key(profile.get("experience", "intermediate"))
     protein_mult_str = (
         f"{m['protein_multiplier']} g/kg "
         f"(computed for {exp_key} tier, band {PROTEIN_MULTIPLIER[exp_key][0]}–{PROTEIN_MULTIPLIER[exp_key][1]} g/kg, "
@@ -598,13 +677,7 @@ ALLOCATION RULE — when a single training day works MORE THAN ONE muscle group 
 
 COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — use these as the opening 1–2
 exercises for the relevant muscle group instead of banned free-weight lifts):
-  Legs    → Leg Press, Hack Squat Machine, Smith Machine Squat, Goblet Squat (dumbbell),
-            Walking Lunges (dumbbell), Romanian Deadlift (dumbbell)
-  Back    → Lat Pulldown, Seated Cable Row, Chest-Supported Machine Row, Assisted Pull-up,
-            Single-Arm Dumbbell Row
-  Chest   → Machine Chest Press, Incline Dumbbell Press, Flat Dumbbell Press, Smith Machine
-            Bench Press
-  Shoulders → Machine Shoulder Press, Seated Dumbbell Press, Arnold Press
+{chr(10).join(f"  {group:<10}→ {', '.join(names)}" for group, names in COMPOUND_MOVEMENT_LIBRARY.items())}
 Isolation work (lateral raises, curls, triceps extensions, calf raises, core/abs) comes AFTER
 the compound movement(s) for that day, never before.
 
@@ -695,6 +768,44 @@ def parse_llm_json(raw: str) -> dict:
         )
 
 
+# ── WEIGHT FORMATTING HELPERS ─────────────────────────────────────────────────
+# result.html's stat cards hard-code the "kg" unit (e.g. "{{ user.current_weight }} kg").
+# Previously user.current_weight / user.target_weight / plan.weight_to_lose were
+# left entirely to the LLM to fill in, and the LLM would often *also* write "kg"
+# into the value itself (its own schema example for weight_to_lose even shows
+# "~6–8 kg to lose", and the template appended " to lose" again on top of that) —
+# producing visible "kg kg" / "to lose to lose" duplication.
+# Fix: these three fields are deterministic from form input, so compute them in
+# Python and overwrite whatever the LLM returned, instead of trusting its
+# formatting.
+def _clean_weight_label(val) -> str:
+    """Strip any embedded kg unit text so the template's own 'kg' suffix never doubles up."""
+    s = str(val).strip()
+    if not s:
+        return "—"
+    s = re.sub(r"\s*kgs?\b", "", s, flags=re.IGNORECASE).strip()
+    return s if s else "—"
+
+
+def _weight_change_phrase(current_w, target_w) -> str:
+    """
+    Deterministic '~X kg to lose' / '~X kg to gain' / 'Maintain current weight'
+    string. Falls back to '—' if target isn't a single parseable number (e.g.
+    left blank or entered as a range) — never leaves it to the LLM to invent
+    wording, since the template doesn't add a unit/suffix of its own anymore.
+    """
+    try:
+        cur = float(current_w)
+        tgt = float(str(target_w).strip())
+    except (TypeError, ValueError):
+        return "—"
+    diff = cur - tgt
+    if abs(diff) < 0.5:
+        return "Maintain current weight"
+    direction = "to lose" if diff > 0 else "to gain"
+    return f"~{abs(diff):.0f} kg {direction}"
+
+
 # ── SCHEMA ENFORCER ───────────────────────────────────────────────────────────
 _RECOVERY_DEFAULT = {
     "daily_nonneg": [
@@ -732,7 +843,7 @@ _RECOVERY_DEFAULT = {
 }
 
 
-def enforce_schema(data: dict) -> dict:
+def enforce_schema(data: dict, profile: dict | None = None) -> dict:
     data.setdefault("user", {})
     data.setdefault("plan", {})
     data.setdefault("workout", {})
@@ -761,10 +872,37 @@ def enforce_schema(data: dict) -> dict:
     for key, val in user_defaults.items():
         data["user"].setdefault(key, val)
 
+    # ── Deterministic overrides ────────────────────────────────────────────
+    # These three are fully determined by the form input — never trust the
+    # LLM's own formatting for them (see _clean_weight_label / _weight_change_phrase
+    # docstrings for why).
+    if profile is not None:
+        data["user"]["current_weight"] = _clean_weight_label(
+            profile.get("current_weight_kg", data["user"]["current_weight"])
+        )
+        data["user"]["target_weight"] = _clean_weight_label(
+            profile.get("target_weight_kg", data["user"]["target_weight"])
+        )
+        data["plan"]["weight_to_lose"] = _weight_change_phrase(
+            profile.get("current_weight_kg"), profile.get("target_weight_kg")
+        )
+    else:
+        # No profile available (e.g. unit-testing this function directly) —
+        # still strip stray "kg" text from whatever the LLM returned so the
+        # template can't double up the unit.
+        data["user"]["current_weight"] = _clean_weight_label(data["user"]["current_weight"])
+        data["user"]["target_weight"] = _clean_weight_label(data["user"]["target_weight"])
+
     data["workout"].setdefault("weekly_schedule", [])
     data["workout"].setdefault("days", [])
 
-    # Ensure warmup_exercises exists on every non-rest day
+    # Experience tier drives the hard exercise-volume ceiling below.
+    exp_key = _resolve_exp_key(profile.get("experience", "intermediate")) if profile else "intermediate"
+    limits = EXERCISE_LIMITS.get(exp_key, EXERCISE_LIMITS["intermediate"])
+
+    # Ensure warmup_exercises exists on every non-rest day, and enforce the
+    # tier's volume ceiling in code (not just via the prompt) so a beginner
+    # can never end up with an advanced-volume workout.
     for day in data["workout"].get("days", []):
         if not day.get("is_rest", False):
             day.setdefault("warmup_exercises", [])
@@ -779,6 +917,16 @@ def enforce_schema(data: dict) -> dict:
                     f"Only {len(day['exercises'])} exercise(s) generated for this day — "
                     f"below the requested minimum. Consider regenerating."
                 )
+            # Hard cap: trim any excess exercises beyond what this tier allows,
+            # so beginners never get overloaded even if the LLM over-generated.
+            # Compound movements are always kept; isolation work is cut first.
+            if len(day["exercises"]) > limits["max_exercises"]:
+                day["exercises"] = _trim_preserving_compounds(day["exercises"], limits["max_exercises"])
+            # Hard cap: clamp each exercise's set count to the tier's ceiling.
+            for ex in day["exercises"]:
+                sets_match = re.search(r"\d+", str(ex.get("sets", "")))
+                if sets_match and int(sets_match.group()) > limits["max_sets"]:
+                    ex["sets"] = str(limits["max_sets"])
 
     # Ensure each meal has full macro fields
     for meal in data["diet"].get("meals", []):
@@ -813,5 +961,5 @@ def generate_dashboard(profile: dict, llm_caller) -> str:
     user_prompt  = build_user_prompt(profile)
     raw_response = llm_caller(SYSTEM_PROMPT, user_prompt)
     data = parse_llm_json(raw_response)
-    data = enforce_schema(data)
+    data = enforce_schema(data, profile)
     return render_dashboard(data)
