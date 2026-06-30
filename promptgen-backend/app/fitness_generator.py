@@ -32,11 +32,53 @@ TEMPLATE_FILE = "result.html"
 
 # ── PROTEIN MULTIPLIER TABLE ──────────────────────────────────────────────────
 # Keys match the <select> values in dashbord.html  (Beginner / Intermediate / Advanced)
+# These are the OUTER bounds for each tier. The actual multiplier used is computed
+# dynamically within this band based on activity level + BMI — see _protein_multiplier().
 PROTEIN_MULTIPLIER = {
-    "beginner":     (1.0, 1.1),   # g of protein per kg of body-weight
-    "intermediate": (1.2, 1.3),
-    "advanced":     (1.4, 1.8),
+    "beginner":     (1.0, 1.1),    # g of protein per kg of body-weight
+    "intermediate": (1.2, 1.4),
+    "advanced":     (1.5, 2.0),
 }
+
+# Activity level → how far up the tier's protein band a client sits (0 = bottom, 1 = top).
+# More active clients break down more muscle protein and need more to recover/grow.
+_ACTIVITY_PROTEIN_SCORE = {
+    "sedentary":   0.0,
+    "light":       0.25,
+    "moderate":    0.5,
+    "very_active": 0.75,
+    "extreme":     1.0,
+}
+
+
+def _bmi_protein_score(bmi: float) -> float:
+    """
+    Higher BMI (more total mass, proportionally more fat) pulls the multiplier
+    DOWN within the tier's band, since g/kg applied to total bodyweight would
+    otherwise overshoot real protein needs for someone carrying more fat mass.
+    Lower BMI (lean/underweight, trying to build mass) pulls it UP.
+    """
+    if bmi < 18.5:
+        return 1.0       # underweight — push toward top of band to support mass gain
+    elif bmi < 25:
+        return 0.6        # normal range — slightly above mid-band
+    elif bmi < 30:
+        return 0.3        # overweight — lower portion of band
+    else:
+        return 0.0        # obese — bottom of band
+
+
+def _protein_multiplier(exp_key: str, activity_key: str, bmi: float) -> float:
+    """
+    Returns a single g/kg multiplier, computed within [low, high] for the
+    client's experience tier, weighted by activity level and BMI.
+    """
+    low, high = PROTEIN_MULTIPLIER[exp_key]
+    span = high - low
+    activity_score = _ACTIVITY_PROTEIN_SCORE.get(activity_key, 0.5)
+    bmi_score = _bmi_protein_score(bmi)
+    combined_score = (activity_score + bmi_score) / 2
+    return round(low + span * combined_score, 2)
 
 # ── EXERCISE VOLUME TABLE ──────────────────────────────────────────────────────
 # Scales workout rigour to experience level. Drives the hard exercise-count
@@ -174,16 +216,21 @@ def _calculate_macros(profile: dict) -> dict:
 
     tdee = bmr * activity
 
-    # Protein multiplier band
+    # BMI (for protein multiplier weighting)
+    height_m = height / 100
+    bmi = weight / (height_m ** 2) if height_m > 0 else 22.0
+
+    # Protein multiplier band + dynamic single value within it
     exp_key = "intermediate"
     for k in PROTEIN_MULTIPLIER:
         if experience.startswith(k[:3]):   # beg / int / adv prefix match
             exp_key = k
             break
     p_low, p_high = PROTEIN_MULTIPLIER[exp_key]
+    p_dynamic = _protein_multiplier(exp_key, profile.get("activity_key", "moderate"), bmi)
     protein_g_low  = math.ceil(weight * p_low)
     protein_g_high = math.ceil(weight * p_high)
-    protein_g_mid  = (protein_g_low + protein_g_high) // 2
+    protein_g_mid  = round(weight * p_dynamic)
 
     # Calorie target
     if "fat loss" in goal or "weight loss" in goal or "cut" in goal:
@@ -204,6 +251,8 @@ def _calculate_macros(profile: dict) -> dict:
 
     return {
         "bmr":           round(bmr),
+        "bmi":           round(bmi, 1),
+        "protein_multiplier": p_dynamic,
         "tdee":          round(tdee),
         "target_kcal":   target_kcal,
         "protein_g_low": protein_g_low,
@@ -421,7 +470,11 @@ def build_user_prompt(profile: dict) -> str:
         if exp_raw.startswith(k[:3]):
             exp_key = k
             break
-    protein_mult_str = f"{PROTEIN_MULTIPLIER[exp_key][0]}–{PROTEIN_MULTIPLIER[exp_key][1]} g/kg"
+    protein_mult_str = (
+        f"{m['protein_multiplier']} g/kg "
+        f"(computed for {exp_key} tier, band {PROTEIN_MULTIPLIER[exp_key][0]}–{PROTEIN_MULTIPLIER[exp_key][1]} g/kg, "
+        f"weighted by activity level + BMI {m['bmi']})"
+    )
     vol = EXERCISE_VOLUME[exp_key]
 
     # ── 5. Warmup hints per training days
@@ -464,9 +517,12 @@ Activity level:     {ACTIVITY_LABEL.get(activity_key, activity_key)}
 ━━ CALCULATED TARGETS (USE THESE EXACT NUMBERS) ━━
 BMR:              {m['bmr']} kcal
 TDEE:             {m['tdee']} kcal
+BMI:              {m['bmi']}
 Daily calorie target: {m['target_kcal']} kcal  ({m['phase_label']})
-Protein multiplier:   {protein_mult_str}  (for {exp_key} level)
-Protein target:   {m['protein_g_low']}–{m['protein_g_high']} g/day  (use {m['protein_g_mid']} g as the midpoint)
+Protein multiplier:   {protein_mult_str}
+Protein target:   {m['protein_g_mid']} g/day — this is the EXACT target, already calculated
+                  from bodyweight × the activity/BMI-weighted multiplier above
+                  (full tier band for reference only: {m['protein_g_low']}–{m['protein_g_high']} g/day)
 Carbohydrate target:  {m['carb_g']} g/day
 Fat target:           {m['fat_g']} g/day
 
@@ -510,19 +566,35 @@ Session duration is {duration} — size the exercise volume accordingly.
 Avoid free-weight barbell squat, deadlift, barbell bench press, overhead barbell press (injury risk) —
 use the machine/cable/dumbbell compound equivalents listed below instead.
 
-MUSCLE PRIORITY RULES (mandatory — bigger muscle groups get trained first and harder):
-- Order each day's "exercises" array by muscle size, largest → smallest:
-  1) Legs/Glutes (quads, hamstrings, glutes) → 2) Back (lats, mid-back) → 3) Chest →
-  4) Shoulders → 5) Arms (biceps/triceps) → 6) Calves/Core/small isolation last.
+MUSCLE PRIORITY RULES (mandatory — bigger muscle groups get MORE exercises, not just trained
+"first and harder" — this directly sets the exercise COUNT per muscle group, not just ordering):
+
+Muscle size rank (1 = largest, 6 = smallest):
+  1) Legs/Glutes (quads, hamstrings, glutes)
+  2) Back (lats, mid-back, rear delts)
+  3) Chest
+  4) Shoulders (front/side delts)
+  5) Arms (biceps, triceps)
+  6) Calves / Core / small isolation
+
+ALLOCATION RULE — when a single training day works MORE THAN ONE muscle group from this list
+(e.g. a Push day works Chest + Shoulders + Triceps), distribute that day's total exercise count
+({vol['exercises_per_day']}) across the trained muscle groups in proportion to their rank:
+  - The HIGHEST-ranked (largest) muscle trained that day gets the MOST exercises — never fewer
+    exercises than any lower-ranked muscle trained the same day.
+  - As a concrete split for a day training 2 muscle groups: ~60% of exercises to the larger
+    group, ~40% to the smaller (round in favour of the larger group).
+  - For a day training 3 muscle groups: roughly 45% / 35% / 20% from largest to smallest.
+  - A muscle group ranked 5–6 (Arms, Calves, Core) NEVER receives more exercises in a single
+    day than a muscle group ranked 1–3 (Legs, Back, Chest) trained that same day.
+- Order each day's "exercises" array by this same rank, largest → smallest (compound movements
+  for the largest muscle group come first; isolation work for the smallest comes last).
 - A day's first 1–2 exercises must ALWAYS be a compound movement for that day's largest
   trained muscle group (see COMPOUND MOVEMENT LIBRARY below) — never open a session with
   an isolation exercise.
-- Bigger muscle groups get MORE volume: Legs and Back days should sit at the top end of the
-  {vol['exercises_per_day']} range and the top end of {vol['sets_per_exercise']} sets; pure
-  Arms/Calves/Core work should sit at the lower end of those ranges.
-- Across the whole weekly split, Legs and Back must each appear in at least as many sessions
-  as Arms/Shoulders isolation work — do not under-train the big muscle groups relative to the
-  small ones.
+- Across the whole weekly split, Legs and Back (rank 1–2) must each appear in at least as many
+  total weekly exercise slots as Arms alone (rank 5) — do not under-train the big muscle groups
+  relative to the small ones over the course of the week.
 
 COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — use these as the opening 1–2
 exercises for the relevant muscle group instead of banned free-weight lifts):

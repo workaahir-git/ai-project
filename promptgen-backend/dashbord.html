@@ -77,30 +77,24 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
 </head>
 <body>
 <script type="module">
-  try {
-    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js'
 
-    const supabase = createClient(
-      'https://yabclxadadynmprymcns.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
-    )
+  const supabase = createClient(
+    'https://yabclxadadynmprymcns.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
+  )
 
-    // Guard: bounce to login if there's no active session
+  // Guard: bounce to login if there's no active session
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    window.location.href = 'login.html.html'
+  }
+
+  // Expose what the rest of the page (classic script below) needs
+  window.__supabase = supabase
+  window.__getAccessToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      window.location.href = 'login.html.html'
-    }
-
-    // Expose what the rest of the page (classic script below) needs
-    window.__supabase = supabase
-    window.__getAccessToken = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      return session ? session.access_token : null
-    }
-    window.__supabaseReady = true
-  } catch (err) {
-    console.error('Supabase failed to load:', err)
-    window.__supabaseReady = false
+    return session ? session.access_token : null
   }
 </script>
 <div class="blobs"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
@@ -701,22 +695,56 @@ async function handleSubmit() {
   });
 
   try {
-    if (typeof window.__getAccessToken !== "function") {
-      throw new Error("Auth system failed to load — check your connection and refresh the page.");
-    }
     const token = await window.__getAccessToken();
     if (!token) {
       throw new Error("Your session expired — please log in again.");
     }
 
-    const res = await fetch(RESULT_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Bearer ${token}`,
-      },
-      body,
-    });
+    // Render's free tier can sleep after inactivity — the first request after
+    // a while can take 30-60+ seconds to wake the server back up. We retry a
+    // couple of times with increasing patience instead of failing immediately,
+    // and update the message so it doesn't look broken while waiting.
+    const fetchAttempts = [
+      { timeoutMs: 20000,  message: 'Generating your plan…' },
+      { timeoutMs: 45000,  message: 'Still working — waking up the server, this can take up to a minute…' },
+      { timeoutMs: 60000,  message: 'Almost there — first request after idle time can be slow…' },
+    ];
+
+    let res = null;
+    let lastErr = null;
+
+    for (let i = 0; i < fetchAttempts.length; i++) {
+      const attempt = fetchAttempts[i];
+      s.className = "status"; s.innerHTML = '<span class="spin">⏳</span> ' + attempt.message;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), attempt.timeoutMs);
+
+      try {
+        res = await fetch(RESULT_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": `Bearer ${token}`,
+          },
+          body,
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        break; // got a response, stop retrying
+      } catch (err) {
+        clearTimeout(timer);
+        lastErr = err;
+        res = null;
+        // try again with the next, more patient attempt
+      }
+    }
+
+    if (!res) {
+      throw new Error(
+        "Couldn't reach the server after several tries. It may still be waking up — please wait a few seconds and try again."
+      );
+    }
 
     const html = await res.text();
 
