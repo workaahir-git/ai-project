@@ -15,11 +15,15 @@ Changes vs original:
   • JSON schema extended: meal options now carry carb_g + fat_g fields;
     workout days carry a warmup_exercises[] array instead of a plain string
   • enforce_schema() updated to match the extended schema
-  • NEW: per-day exercise counts are PRECOMPUTED in Python (_compute_day_plan /
+  • per-day exercise counts are PRECOMPUTED in Python (_compute_day_plan /
     _render_day_plan_table) and injected as an authoritative fill-in checklist,
     so the local LLM never has to do proportional math. This fixes (a) Legs days
     not opening with a squat-pattern compound, and (b) Push days coming back with
     only one chest movement.
+  • parse_llm_json() now extracts EXACTLY the first brace-balanced {...} object
+    via _extract_first_json_object() instead of a greedy `\\{.*\\}` regex. This
+    fixes the "Extra data" JSONDecodeError that occurred when the LLM appended a
+    duplicate object / repeated block / trailing prose after the first object.
 ──────────────────────────────────────────────────────────────────────────────
 """
 
@@ -511,6 +515,9 @@ CRITICAL OUTPUT RULES — READ BEFORE GENERATING:
 8. Every required field in the schema below MUST be present — do not skip any key.
 9. If you are unsure of a value, use a sensible default rather than omitting the field.
 10. Your response must parse successfully with Python's json.loads() with zero modifications.
+11. Output the JSON object EXACTLY ONCE. Do NOT repeat, restate, or duplicate the object.
+    After the final closing '}' of the single JSON object, STOP immediately — emit no further text.
+12. Do NOT repeat a key within the same object (each key appears at most once).
 
 SCHEMA (copy key names precisely):
 
@@ -648,8 +655,9 @@ SCHEMA (copy key names precisely):
   }
 }
 
-FINAL REMINDER: Output ONLY the raw JSON object.
+FINAL REMINDER: Output ONLY the raw JSON object, EXACTLY ONCE.
 The very first character of your response must be '{' and the very last must be '}'.
+Do not write anything after that final '}'.
 """
 
 
@@ -920,24 +928,74 @@ Example warmup tokens by split type:
 4. warmup_exercises must be an array of strings for each non-rest day.
 5. Use only the schema defined by the system prompt — no extra keys, no missing keys.
 6. The PER-DAY EXERCISE PLAN counts are authoritative — match them exactly, day by day.
+7. Output the JSON object EXACTLY ONCE. Stop immediately after the final closing brace.
 
 Generate the complete fitness dashboard JSON now.
 """
 
 
 # ── PARSE LLM RESPONSE ────────────────────────────────────────────────────────
+def _extract_first_json_object(text: str):
+    """
+    Scan `text` and return the substring of the FIRST complete, brace-balanced
+    JSON object (from its opening '{' to the matching '}'), correctly skipping
+    braces that appear inside string literals. Returns None if no balanced
+    object is found.
+
+    This replaces a greedy `\\{.*\\}` regex, which grabbed from the first '{'
+    to the LAST '}' in the whole response — so when the LLM appended a second
+    object or repeated a block (a common local-LLM failure), everything got
+    swept in and json.loads() raised "Extra data". Brace-counting stops at the
+    end of the first valid object and discards any trailing junk.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for i in range(start, len(text)):
+        ch = text[i]
+
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+
+        # not inside a string
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                # matched the opening brace — this is the end of the first object
+                return text[start:i + 1]
+
+    return None  # unbalanced / never closed
+
+
 def parse_llm_json(raw: str) -> dict:
     text = raw
 
     text = re.sub(r"```(?:json)?\s*", "", text)
     text = text.replace("```", "").strip()
 
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
+    # Extract EXACTLY the first balanced {...} object (ignores any duplicate
+    # object or trailing prose the LLM appended after it).
+    candidate = _extract_first_json_object(text)
+    if candidate is None:
         raise ValueError(
             f"No JSON object found in LLM response.\n\nRaw output:\n{raw[:500]}"
         )
-    text = match.group(0)
+    text = candidate
 
     text = re.sub(r"(?<!:)//[^\n\"]*", "", text)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
@@ -964,6 +1022,11 @@ def parse_llm_json(raw: str) -> dict:
             text,
         )
         single_to_double = re.sub(r",\s*([}\]])", r"\1", single_to_double)
+        # brace-balance again after the quote swap, in case the swap re-exposed
+        # a trailing duplicate that was previously masked
+        rebalanced = _extract_first_json_object(single_to_double)
+        if rebalanced is not None:
+            single_to_double = rebalanced
         return json.loads(single_to_double)
     except json.JSONDecodeError as e:
         raise ValueError(
