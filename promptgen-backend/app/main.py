@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.auth import get_current_user
+from app.membership import get_or_join_member
 from app.ollama_client import generate_with_ollama
 from app.schemas import GenerateRequest, GenerateResponse
 from app.fitness_generator import (
@@ -82,6 +83,7 @@ def whoami(user: dict = Depends(get_current_user)):
 async def result_page(
     request: Request,
     user: dict = Depends(get_current_user),
+    member: dict = Depends(get_or_join_member),
     # ── Basic bio ────────────────────────────────────────────────────────────
     name:       str = Form(""),
     age:        str = Form(""),

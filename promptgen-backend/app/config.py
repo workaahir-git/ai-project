@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     supabase_url: str
     supabase_jwt_secret: str
+    supabase_service_role_key: str
+    demo_gym_id: str
     gemini_api_key: str
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
