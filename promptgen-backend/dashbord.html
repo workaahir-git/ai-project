@@ -98,13 +98,17 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
     const res = await fetch('https://ai-project-login-de6g.onrender.com/api/my-plan', {
       headers: { Authorization: `Bearer ${session.access_token}` }
     })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.has_plan) {
-        sessionStorage.setItem('fitforge_plan_html', data.html)
-        window.location.href = 'result.html'
-      }
-    }
+   if (res.ok) {
+  const data = await res.json()
+  if (data.has_plan) {
+    sessionStorage.setItem('fitforge_plan_html', data.html)
+    window.location.href = 'result.html'
+  }
+} else if (res.status === 403) {
+  const err = await res.json().catch(() => ({}))
+  document.body.innerHTML = '<div style="font-family:sans-serif;padding:60px;text-align:center">' +
+    '<h2>Access restricted</h2><p>' + (err.detail || 'Contact your gym.') + '</p></div>'
+}
   } catch (e) {
     // If this check fails (network hiccup etc.), fall through to the
     // normal form — worst case they see the form, not a broken page.
