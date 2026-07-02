@@ -683,17 +683,37 @@ sensibly between blocks, not all bunched at the end):
 Do NOT substitute a different split. Each day's "type" field must clearly name the split
 segment it belongs to (e.g. "Push Day — Chest · Shoulders · Triceps"), consistent with the
 sequence above.
-Avoid free-weight barbell squat, deadlift, barbell bench press, overhead barbell press (injury risk) —
-use the machine/cable/dumbbell compound equivalents listed below instead.
+
+BANNED EXERCISES — high injury-risk or spotter/technique-assistance-required movements. NEVER
+include any of these, in any variant (barbell, dumbbell, or otherwise), under any name:
+  - Any deadlift variant: conventional deadlift, Romanian deadlift (RDL), stiff-leg deadlift,
+    sumo deadlift, single-leg RDL, trap-bar deadlift
+  - Free-weight barbell back squat, barbell front squat
+  - Free-weight barbell bench press, barbell overhead/military press
+  - Olympic lifts: snatch, clean and jerk, power clean
+  - Any movement that ordinarily requires a spotter or a coach physically assisting the lift
+Squat-pattern and press-pattern compounds are still REQUIRED and welcome — just use the
+machine/Smith/dumbbell-safe versions listed in the COMPOUND MOVEMENT LIBRARY below, never the
+free-weight/hinge versions banned above.
 
 SESSION STRUCTURE RULE (mandatory — applies to EVERY non-rest day):
-- Exercise #1 of the day, AND ONLY exercise #1, is a compound movement (see COMPOUND MOVEMENT
-  LIBRARY below) for that day's largest trained muscle group. Never more than one compound
-  movement per day, and never open a session with anything else.
-- EVERY exercise after the first ({exp_key} level → {vol['isolation_count']} of them) is
-  ISOLATION work — single-joint, single-muscle movements (lateral raises, curls, triceps
-  extensions, leg extensions/curls, calf raises, core/abs, etc.). Do not add a second compound
-  lift anywhere later in the day, even for a second muscle group trained that day.
+- For EACH "big" muscle group (rank 1–4: Legs, Back, Chest, Shoulders — see MUSCLE PRIORITY
+  RULES below) trained on a given day, exercise selection MUST open with ONE compound movement
+  from the COMPOUND MOVEMENT LIBRARY for that specific muscle group, before any isolation work
+  for that muscle group appears. A day training two big muscle groups (e.g. a Push day working
+  Chest + Shoulders) therefore gets TWO compound movements that day — one per big group — not
+  just one shared compound for the whole session. A day training only one big muscle group
+  (e.g. a Legs day) gets exactly one compound.
+  - Arms (rank 5) and Calves/Core (rank 6) NEVER get their own dedicated compound lift — they
+    are isolation-only muscle groups in this program.
+- LEGS-SPECIFIC RULE: whenever Legs is the (or a) big muscle group trained that day, its
+  compound MUST specifically be a squat-pattern movement — Leg Press, Hack Squat Machine, Smith
+  Machine Squat, or Goblet Squat (dumbbell). Do not substitute Walking Lunges or any hinge
+  movement as the Legs compound; lunges may still appear later as isolation/accessory work if
+  volume allows, but never as exercise #1 for a Legs-trained day.
+- Every exercise that is NOT one of these per-muscle-group compounds is ISOLATION work —
+  single-joint, single-muscle movements (lateral raises, curls, triceps extensions, leg
+  extensions/curls, calf raises, core/abs, etc.).
 
 MUSCLE PRIORITY RULES (mandatory — bigger muscle groups get MORE isolation exercises, not just
 trained "first and harder" — this directly sets the isolation exercise COUNT per muscle group):
@@ -706,42 +726,61 @@ Muscle size rank (1 = largest, 6 = smallest):
   5) Arms (biceps, triceps)
   6) Calves / Core / small isolation
 
+ARM ISOLATION FLOOR (mandatory, HARD MINIMUM — overrides the proportional ALLOCATION RULE below
+whenever they'd conflict):
+- On ANY training day that works biceps, biceps get a MINIMUM of 2 dedicated isolation
+  exercises that day. On ANY training day that works triceps, triceps get a MINIMUM of 2
+  dedicated isolation exercises that day. This is a floor, not a target — go above 2 for either
+  if the day's volume allows (e.g. a dedicated Arms day), but never below 2 for a muscle that is
+  trained that day at all.
+- If satisfying this floor would push a day's total exercise count above the tier's normal
+  "exercises per day" figure in EXERCISE VOLUME RULES below, the floor wins — expand the day's
+  total exercise count as needed rather than shorting biceps/triceps below 2 each.
+
 ALLOCATION RULE — when a single training day works MORE THAN ONE muscle group from this list
 (e.g. a Push day works Chest + Shoulders + Triceps), distribute that day's ISOLATION exercise
-count ({vol['isolation_count']}, i.e. everything after exercise #1) across the trained muscle
-groups in proportion to their rank:
+count ({vol['isolation_count']}, i.e. everything after the compound(s)) across the trained muscle
+groups in proportion to their rank, SUBJECT TO the ARM ISOLATION FLOOR above:
   - The HIGHEST-ranked (largest) muscle trained that day gets the MOST isolation exercises —
     never fewer than any lower-ranked muscle trained the same day.
   - As a concrete split for a day training 2 muscle groups: ~60% of the isolation slots to the
-    larger group, ~40% to the smaller (round in favour of the larger group).
-  - For a day training 3 muscle groups: roughly 45% / 35% / 20% from largest to smallest.
+    larger group, ~40% to the smaller (round in favour of the larger group), then apply the arm
+    floor on top if arms are one of the two groups.
+  - For a day training 3 muscle groups: roughly 45% / 35% / 20% from largest to smallest, then
+    apply the arm floor on top if arms are one of the three groups.
   - A muscle group ranked 5–6 (Arms, Calves, Core) NEVER receives more isolation exercises in a
-    single day than a muscle group ranked 1–3 (Legs, Back, Chest) trained that same day.
-- Order each day's "exercises" array by this same rank, largest → smallest, with exercise #1
-  (the compound lift) always first.
+    single day than a muscle group ranked 1–3 (Legs, Back, Chest) trained that same day — UNLESS
+    the ARM ISOLATION FLOOR requires it to reach the 2-exercise minimum, in which case the floor
+    takes precedence over this ordering guideline.
+- Order each day's "exercises" array as: compound(s) first (largest trained group's compound
+  before smaller trained group's compound), then isolation work ordered largest → smallest.
 - Across the whole weekly split, Legs and Back (rank 1–2) must each appear in at least as many
   total weekly exercise slots as Arms alone (rank 5) — do not under-train the big muscle groups
   relative to the small ones over the course of the week.
 
-COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — use exactly ONE of these as exercise
-#1 of the day, for the relevant muscle group, instead of banned free-weight lifts):
-  Legs    → Leg Press, Hack Squat Machine, Smith Machine Squat, Goblet Squat (dumbbell),
-            Walking Lunges (dumbbell), Romanian Deadlift (dumbbell)
+COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — for each big muscle group (rank 1-4)
+trained that day, use exactly ONE of these as that group's opening compound, instead of any
+banned free-weight/hinge lift. NOTE: RDL/deadlift variants have been removed from this library
+entirely per the BANNED EXERCISES list above — Legs compounds are squat-pattern only):
+  Legs    → Leg Press, Hack Squat Machine, Smith Machine Squat, Goblet Squat (dumbbell)
+            [squat-pattern only — see LEGS-SPECIFIC RULE above]
   Back    → Lat Pulldown, Seated Cable Row, Chest-Supported Machine Row, Assisted Pull-up,
             Single-Arm Dumbbell Row
   Chest   → Machine Chest Press, Incline Dumbbell Press, Flat Dumbbell Press, Smith Machine
             Bench Press
   Shoulders → Machine Shoulder Press, Seated Dumbbell Press, Arnold Press
-Every exercise from #2 onward MUST be isolation work — never a second compound lift.
+Every exercise that isn't one of these per-group compounds MUST be isolation work.
 
-EXERCISE VOLUME RULES (mandatory, HARD CAP scaled to {exp_key} level — this is a ceiling, not a
-suggestion):
-- Exercises per training day: EXACTLY {vol['exercises_per_day']} total
+EXERCISE VOLUME RULES (mandatory — scaled to {exp_key} level; this is a FLOOR, not a ceiling,
+whenever the ARM ISOLATION FLOOR or the one-compound-per-big-muscle-group rule above requires
+more exercises than the base figure below):
+- Base exercises per training day: {vol['exercises_per_day']} total
   ({vol['compound_count']} compound as exercise #1, then {vol['isolation_count']} isolation
-  exercises). A single exercise per day is NEVER acceptable, and going OVER this cap is also
-  invalid — every non-rest day's "exercises" array must contain exactly this many distinct
-  movements, ordered compound → isolation, AND ordered by muscle size per the MUSCLE PRIORITY
-  RULES above.
+  exercises) — use this exact figure UNLESS the day trains 2+ big muscle groups (which adds one
+  compound per extra big group) or the ARM ISOLATION FLOOR requires 2+ dedicated exercises for
+  biceps and/or triceps that day, in which case increase the day's total exercise count to
+  satisfy both. Never go below this base figure, and never go below either mandatory floor.
+  A single exercise per day is NEVER acceptable.
 - Sets per exercise: {vol['sets_per_exercise']}
 - Rest between sets: {vol['rest_between_sets']}
 - Intensity guidance: {vol['intensity_note']}
