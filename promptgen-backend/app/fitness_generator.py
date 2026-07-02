@@ -15,6 +15,11 @@ Changes vs original:
   • JSON schema extended: meal options now carry carb_g + fat_g fields;
     workout days carry a warmup_exercises[] array instead of a plain string
   • enforce_schema() updated to match the extended schema
+  • NEW: per-day exercise counts are PRECOMPUTED in Python (_compute_day_plan /
+    _render_day_plan_table) and injected as an authoritative fill-in checklist,
+    so the local LLM never has to do proportional math. This fixes (a) Legs days
+    not opening with a squat-pattern compound, and (b) Push days coming back with
+    only one chest movement.
 ──────────────────────────────────────────────────────────────────────────────
 """
 
@@ -157,6 +162,152 @@ MIN_EXERCISES = {
     "intermediate": 5,
     "advanced": 6,
 }
+
+
+# ── TOKEN → MUSCLE GROUP MAP ──────────────────────────────────────────────────
+# Maps split-day tokens (from split_engine.py) to the ordered list of muscle
+# groups trained that day. "big" groups (rank 1–4) each get exactly one compound;
+# rank 5–6 (arms, calves, core) are isolation-only.
+TOKEN_MUSCLE_MAP = {
+    "push":  ["chest", "shoulders", "triceps"],
+    "pull":  ["back", "biceps"],
+    "legs":  ["legs", "calves"],
+    "upper": ["back", "chest", "shoulders", "biceps", "triceps"],
+    "lower": ["legs", "calves"],
+    "full":  ["legs", "back", "chest", "shoulders"],
+    "cardio": [],
+    "rest":  [],
+}
+
+# Muscle size rank (1 = largest). Rank <= 4 = "big" (gets a compound).
+_MUSCLE_RANK = {
+    "legs": 1, "back": 2, "chest": 3, "shoulders": 4,
+    "biceps": 5, "triceps": 5, "arms": 5,
+    "calves": 6, "core": 6,
+}
+_BIG_MUSCLES = {"legs", "back", "chest", "shoulders"}
+_ARM_MUSCLES = {"biceps", "triceps"}
+
+# Which compound-library entry heads each big muscle group (squat-pattern only for legs).
+_COMPOUND_HINT = {
+    "legs":      "Leg Press / Hack Squat / Smith Machine Squat / Goblet Squat (squat-pattern ONLY — never a lunge or hinge)",
+    "back":      "Lat Pulldown / Seated Cable Row / Chest-Supported Machine Row / Assisted Pull-up",
+    "chest":     "Machine Chest Press / Incline Dumbbell Press / Flat Dumbbell Press / Smith Machine Bench Press",
+    "shoulders": "Machine Shoulder Press / Seated Dumbbell Press / Arnold Press",
+}
+
+ARM_ISOLATION_FLOOR = 2  # hard minimum isolation exercises per arm muscle trained
+
+
+def _parse_low_int(val, default: int) -> int:
+    """'4–6' → 4, '5' → 5, 5 → 5. Takes the LOW end of any range."""
+    if isinstance(val, (int, float)):
+        return int(val)
+    nums = re.findall(r"\d+", str(val))
+    return int(nums[0]) if nums else default
+
+
+def _compute_day_plan(token: str, vol: dict) -> dict:
+    """
+    Precompute the EXACT exercise breakdown for one training day so the LLM
+    never has to do proportional math. Returns a dict:
+      {
+        "muscles":            [ordered largest→smallest],
+        "compound_count":     int,
+        "isolation_by_muscle": {muscle: int, ...},
+        "total_exercises":    int,
+      }
+    Rules applied (in Python, not by the LLM):
+      • one compound per BIG muscle group trained that day
+      • arm floor: biceps/triceps each get >= ARM_ISOLATION_FLOOR isolation if trained
+      • remaining isolation slots distributed largest→smallest, never giving a
+        rank 5–6 muscle more isolation than a rank 1–3 muscle trained the same day
+    """
+    muscles = TOKEN_MUSCLE_MAP.get(token, [])
+    if not muscles:  # cardio / rest / unknown
+        return {
+            "muscles": [], "compound_count": 0,
+            "isolation_by_muscle": {}, "total_exercises": 0,
+        }
+
+    # order largest → smallest
+    muscles = sorted(muscles, key=lambda m: _MUSCLE_RANK.get(m, 5))
+
+    big_trained = [m for m in muscles if m in _BIG_MUSCLES]
+    compound_count = len(big_trained)   # one compound per big group
+
+    # base isolation budget from the tier (strip ranges like "4–6" → take low end)
+    iso_base = _parse_low_int(vol["isolation_count"], default=4)
+
+    isolation_by_muscle = {m: 0 for m in muscles}
+
+    # 1) satisfy the arm floor FIRST (hard override)
+    arms_trained = [m for m in muscles if m in _ARM_MUSCLES]
+    for arm in arms_trained:
+        isolation_by_muscle[arm] = ARM_ISOLATION_FLOOR
+
+    arm_floor_used = sum(isolation_by_muscle[m] for m in arms_trained)
+    remaining_iso = max(0, iso_base - arm_floor_used)
+
+    # 2) distribute remaining isolation slots largest → smallest among NON-arm
+    #    muscles (big groups + calves/core), one at a time (round-robin) so the
+    #    largest muscle always ends up with >= any smaller one.
+    non_arm = [m for m in muscles if m not in _ARM_MUSCLES]
+    i = 0
+    while remaining_iso > 0 and non_arm:
+        m = non_arm[i % len(non_arm)]
+        isolation_by_muscle[m] += 1
+        remaining_iso -= 1
+        i += 1
+
+    total_iso = sum(isolation_by_muscle.values())
+    total_exercises = compound_count + total_iso
+
+    return {
+        "muscles": muscles,
+        "compound_count": compound_count,
+        "isolation_by_muscle": isolation_by_muscle,
+        "total_exercises": total_exercises,
+    }
+
+
+def _render_day_plan_table(sequence: list, vol: dict) -> str:
+    """
+    Turn the split sequence into a literal, per-day fill-in checklist the LLM
+    must obey verbatim — no math left for the model to do.
+    """
+    lines = []
+    for idx, token in enumerate(sequence, start=1):
+        if token == "rest":
+            lines.append(f"  DAY {idx} (REST): REST — no exercises, omit warmup_exercises.")
+            continue
+        if token == "cardio":
+            lines.append(
+                f"  DAY {idx} (CARDIO): 1 steady-state or interval cardio block "
+                f"+ optional core. Include warmup_exercises."
+            )
+            continue
+
+        plan = _compute_day_plan(token, vol)
+        parts = []
+        # compounds first (largest big group's compound first)
+        for m in plan["muscles"]:
+            if m in _BIG_MUSCLES:
+                parts.append(f"1× COMPOUND for {m.upper()} [{_COMPOUND_HINT[m]}]")
+        # isolation next, largest → smallest
+        for m in plan["muscles"]:
+            n = plan["isolation_by_muscle"].get(m, 0)
+            if n > 0:
+                floor_tag = " (ARM FLOOR — mandatory)" if m in _ARM_MUSCLES else ""
+                parts.append(f"{n}× ISOLATION for {m.upper()}{floor_tag}")
+
+        checklist = "\n        • ".join(parts)
+        lines.append(
+            f"  DAY {idx} ({token.upper()} — {' · '.join(m.title() for m in plan['muscles'])}): "
+            f"EXACTLY {plan['total_exercises']} exercises, in this order:\n"
+            f"        • {checklist}"
+        )
+    return "\n".join(lines)
 
 
 def _resolve_exp_key(profile: dict) -> str:
@@ -404,20 +555,20 @@ SCHEMA (copy key names precisely):
             "tempo_or_cue": "Full range, don't lock knees out at top"
           },
           {
-            "name":   "Romanian Deadlift (Dumbbell)",
-            "muscle": "Hamstrings · glutes",
-            "sets":   "4",
-            "reps":   "10–12 reps",
-            "rest":   "90 sec",
-            "tempo_or_cue": "Hinge at hips, slight knee bend, feel the stretch"
+            "name":   "Leg Extension",
+            "muscle": "Quads",
+            "sets":   "3",
+            "reps":   "12–15 reps",
+            "rest":   "60 sec",
+            "tempo_or_cue": "Squeeze at the top, controlled descent"
           },
           {
-            "name":   "Walking Lunges (Dumbbell)",
-            "muscle": "Quads · glutes",
+            "name":   "Seated Leg Curl",
+            "muscle": "Hamstrings",
             "sets":   "3",
-            "reps":   "12 reps each leg",
-            "rest":   "75 sec",
-            "tempo_or_cue": "Controlled descent, front knee stays over ankle"
+            "reps":   "12 reps",
+            "rest":   "60 sec",
+            "tempo_or_cue": "Controlled, no swinging"
           },
           {
             "name":   "Seated Calf Raise",
@@ -427,7 +578,7 @@ SCHEMA (copy key names precisely):
             "rest":   "45–60 sec",
             "tempo_or_cue": "Pause 1 sec at full stretch"
           }
-          // continue for the FULL exercise count required — see EXERCISE VOLUME RULES below.
+          // continue for the EXACT exercise count required — see PER-DAY EXERCISE PLAN below.
           // Note the ordering: largest muscle group's compound movement FIRST, smallest
           // isolation movement LAST — apply this same priority on every training day.
         ],
@@ -588,6 +739,12 @@ def build_user_prompt(profile: dict) -> str:
     })
     split_sequence_str = " → ".join(split["sequence"])
 
+    # ── 8. PRECOMPUTED per-day exercise checklist — no LLM math required.
+    #      This is the authoritative fix for "no squats on Legs day" and
+    #      "only 1 chest exercise on Push day": counts + compounds are decided
+    #      here in Python and handed to the LLM as a literal fill-in list.
+    day_plan_table = _render_day_plan_table(split["sequence"], vol)
+
     return f"""
 CLIENT PROFILE — read every line carefully; ALL of it must be reflected in the JSON you return.
 
@@ -655,7 +812,7 @@ The sum of kcal must be within ±80 kcal of {m['target_kcal']}.
 Client experience level: {profile.get('experience', 'Intermediate')} → training rigour MUST match this tier, not a generic plan.
 Design exactly {training_days_per_week} training days and {7 - training_days_per_week} rest day(s) per week.
 Session duration is {duration} — size the exercise volume accordingly.
-{"RECOVERY GOAL OVERRIDE: this client's goal is recovery/deload/rehab. Regardless of experience tier, stay well short of failure on every set (leave 3-4 reps in reserve), avoid ALL intensity techniques (no drop sets, no supersets, no rest-pause, no partials) even if the tier's intensity guidance below mentions them, and favour controlled tempo, full range of motion, and lighter loads over heavy loading." if is_recovery_goal else ""}
+{"RECOVERY GOAL OVERRIDE: this client's goal is recovery/deload/rehab. Regardless of experience tier, stay well short of failure on every set (leave 3-4 reps in reserve), avoid ALL intensity techniques (no drop sets, no supersets, no rest-pause, no partials) even if the tier's intensity guidance below mentions them, and favour controlled tempo, full range of motion, and lighter loads over heavy loading. Keep the exercise COUNTS in the PER-DAY EXERCISE PLAN unchanged — only reduce intensity/load." if is_recovery_goal else ""}
 
 AI SPLIT ANALYSIS
 
@@ -696,91 +853,42 @@ Squat-pattern and press-pattern compounds are still REQUIRED and welcome — jus
 machine/Smith/dumbbell-safe versions listed in the COMPOUND MOVEMENT LIBRARY below, never the
 free-weight/hinge versions banned above.
 
-SESSION STRUCTURE RULE (mandatory — applies to EVERY non-rest day):
-- For EACH "big" muscle group (rank 1–4: Legs, Back, Chest, Shoulders — see MUSCLE PRIORITY
-  RULES below) trained on a given day, exercise selection MUST open with ONE compound movement
-  from the COMPOUND MOVEMENT LIBRARY for that specific muscle group, before any isolation work
-  for that muscle group appears. A day training two big muscle groups (e.g. a Push day working
-  Chest + Shoulders) therefore gets TWO compound movements that day — one per big group — not
-  just one shared compound for the whole session. A day training only one big muscle group
-  (e.g. a Legs day) gets exactly one compound.
-  - Arms (rank 5) and Calves/Core (rank 6) NEVER get their own dedicated compound lift — they
-    are isolation-only muscle groups in this program.
-- LEGS-SPECIFIC RULE: whenever Legs is the (or a) big muscle group trained that day, its
-  compound MUST specifically be a squat-pattern movement — Leg Press, Hack Squat Machine, Smith
-  Machine Squat, or Goblet Squat (dumbbell). Do not substitute Walking Lunges or any hinge
-  movement as the Legs compound; lunges may still appear later as isolation/accessory work if
-  volume allows, but never as exercise #1 for a Legs-trained day.
-- Every exercise that is NOT one of these per-muscle-group compounds is ISOLATION work —
-  single-joint, single-muscle movements (lateral raises, curls, triceps extensions, leg
-  extensions/curls, calf raises, core/abs, etc.).
+━━ PER-DAY EXERCISE PLAN (AUTHORITATIVE — DO NOT RECOMPUTE OR DEVIATE) ━━
+The exact number of compound and isolation exercises for EVERY training day has
+already been calculated for you below. You MUST produce exactly this many
+exercises per day, of exactly these types, in exactly this order. Do NOT add,
+drop, merge, or re-proportion anything. Do NOT do your own math.
 
-MUSCLE PRIORITY RULES (mandatory — bigger muscle groups get MORE isolation exercises, not just
-trained "first and harder" — this directly sets the isolation exercise COUNT per muscle group):
+{day_plan_table}
 
-Muscle size rank (1 = largest, 6 = smallest):
-  1) Legs/Glutes (quads, hamstrings, glutes)
-  2) Back (lats, mid-back, rear delts)
-  3) Chest
-  4) Shoulders (front/side delts)
-  5) Arms (biceps, triceps)
-  6) Calves / Core / small isolation
-
-ARM ISOLATION FLOOR (mandatory, HARD MINIMUM — overrides the proportional ALLOCATION RULE below
-whenever they'd conflict):
-- On ANY training day that works biceps, biceps get a MINIMUM of 2 dedicated isolation
-  exercises that day. On ANY training day that works triceps, triceps get a MINIMUM of 2
-  dedicated isolation exercises that day. This is a floor, not a target — go above 2 for either
-  if the day's volume allows (e.g. a dedicated Arms day), but never below 2 for a muscle that is
-  trained that day at all.
-- If satisfying this floor would push a day's total exercise count above the tier's normal
-  "exercises per day" figure in EXERCISE VOLUME RULES below, the floor wins — expand the day's
-  total exercise count as needed rather than shorting biceps/triceps below 2 each.
-
-ALLOCATION RULE — when a single training day works MORE THAN ONE muscle group from this list
-(e.g. a Push day works Chest + Shoulders + Triceps), distribute that day's ISOLATION exercise
-count ({vol['isolation_count']}, i.e. everything after the compound(s)) across the trained muscle
-groups in proportion to their rank, SUBJECT TO the ARM ISOLATION FLOOR above:
-  - The HIGHEST-ranked (largest) muscle trained that day gets the MOST isolation exercises —
-    never fewer than any lower-ranked muscle trained the same day.
-  - As a concrete split for a day training 2 muscle groups: ~60% of the isolation slots to the
-    larger group, ~40% to the smaller (round in favour of the larger group), then apply the arm
-    floor on top if arms are one of the two groups.
-  - For a day training 3 muscle groups: roughly 45% / 35% / 20% from largest to smallest, then
-    apply the arm floor on top if arms are one of the three groups.
-  - A muscle group ranked 5–6 (Arms, Calves, Core) NEVER receives more isolation exercises in a
-    single day than a muscle group ranked 1–3 (Legs, Back, Chest) trained that same day — UNLESS
-    the ARM ISOLATION FLOOR requires it to reach the 2-exercise minimum, in which case the floor
-    takes precedence over this ordering guideline.
-- Order each day's "exercises" array as: compound(s) first (largest trained group's compound
-  before smaller trained group's compound), then isolation work ordered largest → smallest.
-- Across the whole weekly split, Legs and Back (rank 1–2) must each appear in at least as many
-  total weekly exercise slots as Arms alone (rank 5) — do not under-train the big muscle groups
-  relative to the small ones over the course of the week.
+HARD RULES that the checklist above already encodes (stated so you can self-check):
+- Every big muscle group (Legs/Back/Chest/Shoulders) trained on a day opens with
+  its OWN compound movement. A Push day (Chest + Shoulders) therefore has TWO
+  compounds (one chest, one shoulder) before ANY isolation work — never one.
+- LEGS compound is ALWAYS a squat-pattern movement (Leg Press / Hack Squat /
+  Smith Machine Squat / Goblet Squat). NEVER a lunge, NEVER a deadlift/RDL/hinge.
+- Any muscle marked "(ARM FLOOR — mandatory)" gets that exact isolation count, no fewer.
+- Order every day's "exercises" array to match the checklist: compounds first
+  (largest trained group's compound first), then isolation largest → smallest muscle.
+- The count shown per day is EXACT. If the checklist says 7 exercises, output 7 —
+  not 5, not 6. A single exercise per day is NEVER acceptable.
 
 COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — for each big muscle group (rank 1-4)
 trained that day, use exactly ONE of these as that group's opening compound, instead of any
 banned free-weight/hinge lift. NOTE: RDL/deadlift variants have been removed from this library
 entirely per the BANNED EXERCISES list above — Legs compounds are squat-pattern only):
   Legs    → Leg Press, Hack Squat Machine, Smith Machine Squat, Goblet Squat (dumbbell)
-            [squat-pattern only — see LEGS-SPECIFIC RULE above]
+            [squat-pattern only — NEVER a lunge or hinge as the Legs compound]
   Back    → Lat Pulldown, Seated Cable Row, Chest-Supported Machine Row, Assisted Pull-up,
             Single-Arm Dumbbell Row
   Chest   → Machine Chest Press, Incline Dumbbell Press, Flat Dumbbell Press, Smith Machine
             Bench Press
   Shoulders → Machine Shoulder Press, Seated Dumbbell Press, Arnold Press
-Every exercise that isn't one of these per-group compounds MUST be isolation work.
+Every exercise that isn't one of these per-group compounds MUST be isolation work
+(single-joint: lateral raises, curls, triceps extensions, leg extensions/curls, calf raises,
+core/abs, etc.).
 
-EXERCISE VOLUME RULES (mandatory — scaled to {exp_key} level; this is a FLOOR, not a ceiling,
-whenever the ARM ISOLATION FLOOR or the one-compound-per-big-muscle-group rule above requires
-more exercises than the base figure below):
-- Base exercises per training day: {vol['exercises_per_day']} total
-  ({vol['compound_count']} compound as exercise #1, then {vol['isolation_count']} isolation
-  exercises) — use this exact figure UNLESS the day trains 2+ big muscle groups (which adds one
-  compound per extra big group) or the ARM ISOLATION FLOOR requires 2+ dedicated exercises for
-  biceps and/or triceps that day, in which case increase the day's total exercise count to
-  satisfy both. Never go below this base figure, and never go below either mandatory floor.
-  A single exercise per day is NEVER acceptable.
+EXERCISE DETAIL RULES (mandatory):
 - Sets per exercise: {vol['sets_per_exercise']}
 - Rest between sets: {vol['rest_between_sets']}
 - Intensity guidance: {vol['intensity_note']}
@@ -811,6 +919,7 @@ Example warmup tokens by split type:
 3. The macro numbers (kcal, protein_g, carb_g, fat_g) in each meal option must be realistic and add up.
 4. warmup_exercises must be an array of strings for each non-rest day.
 5. Use only the schema defined by the system prompt — no extra keys, no missing keys.
+6. The PER-DAY EXERCISE PLAN counts are authoritative — match them exactly, day by day.
 
 Generate the complete fitness dashboard JSON now.
 """
