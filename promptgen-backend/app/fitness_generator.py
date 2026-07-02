@@ -87,7 +87,9 @@ def _protein_multiplier(exp_key: str, activity_key: str, bmi: float) -> float:
 # instruction injected into the prompt so the LLM can't default to "1 exercise".
 EXERCISE_VOLUME = {
     "beginner": {
-        "exercises_per_day": "4–5",
+        "exercises_per_day": "3",       # HARD CAP: 1 compound + 2 isolation
+        "compound_count": 1,
+        "isolation_count": 2,
         "sets_per_exercise":  "2–3",
         "rest_between_sets":  "60–90 sec",
         "intensity_note": (
@@ -96,7 +98,9 @@ EXERCISE_VOLUME = {
         ),
     },
     "intermediate": {
-        "exercises_per_day": "5–7",
+        "exercises_per_day": "5",       # HARD CAP: 1 compound + 4 isolation
+        "compound_count": 1,
+        "isolation_count": 4,
         "sets_per_exercise":  "3–4",
         "rest_between_sets":  "60–90 sec",
         "intensity_note": (
@@ -105,7 +109,9 @@ EXERCISE_VOLUME = {
         ),
     },
     "advanced": {
-        "exercises_per_day": "7–9",
+        "exercises_per_day": "6–8",     # HIGHER volume: 1–2 compound + rest isolation
+        "compound_count": "1–2",
+        "isolation_count": "4–6",
         "sets_per_exercise":  "4–5",
         "rest_between_sets":  "45–75 sec (60–120 sec only on heavy compounds)",
         "intensity_note": (
@@ -116,6 +122,26 @@ EXERCISE_VOLUME = {
         ),
     },
 }
+
+# Minimum (floor) exercise count per tier, used to size the schema-enforcement
+# low-volume warning. Advanced uses the low end of its "6–8" range.
+MIN_EXERCISES = {
+    "beginner": 3,
+    "intermediate": 5,
+    "advanced": 6,
+}
+
+
+def _resolve_exp_key(profile: dict) -> str:
+    """Same beg/int/adv prefix-match logic used elsewhere, exposed as a
+    small helper so both build_user_prompt() and generate_dashboard() stay
+    in sync on which tier a client falls into."""
+    exp_raw = str(profile.get("experience", "intermediate")).lower()
+    for k in PROTEIN_MULTIPLIER:
+        if exp_raw.startswith(k[:3]):
+            return k
+    return "intermediate"
+
 
 # ── DIET RESTRICTION TOKENS ───────────────────────────────────────────────────
 # Hard tokens injected into the prompt so the model cannot misread the setting.
@@ -235,9 +261,17 @@ def _calculate_macros(profile: dict) -> dict:
     protein_g_mid  = round(weight * p_dynamic)
 
     # Calorie target
+    is_recovery = any(t in goal for t in ("recovery", "recover", "deload", "injury", "rehab"))
     if "fat loss" in goal or "weight loss" in goal or "cut" in goal:
         target_kcal = round(tdee * 0.82)   # ~18% deficit
         phase_label = "Calorie deficit"
+    elif is_recovery:
+        # Recovery/deload/rehab clients should NOT be in a deficit or surplus —
+        # under-fueling impairs tissue repair, over-fueling isn't the goal
+        # either. Hold at maintenance and let training volume (handled in
+        # split_engine.py / EXERCISE_VOLUME) do the actual de-loading.
+        target_kcal = round(tdee)
+        phase_label = "Recovery — maintenance calories"
     elif "muscle" in goal or "bulk" in goal or "gain" in goal or "mass" in goal:
         target_kcal = round(tdee * 1.10)   # ~10% surplus
         phase_label = "Lean bulk"
@@ -458,20 +492,27 @@ def build_user_prompt(profile: dict) -> str:
 
     # ── 3. Diet restriction token
     diet_raw = profile.get("diet_pref", "non-vegetarian").lower().strip()
-    # fuzzy match
+    # Exact match first, then fuzzy — checked MOST-SPECIFIC key first.
+    # BUG FIX: the old loop iterated DIET_TOKENS in insertion order and used
+    # a plain substring test ("key in diet_raw or diet_raw in key"). Since
+    # "vegetarian" is a substring of "non-vegetarian" AND of "eggetarian",
+    # and "vegetarian" is the first key in the dict, EVERY non-vegetarian and
+    # eggetarian selection was silently matching "vegetarian" first and
+    # being served a strict-vegetarian diet token — selecting non-veg had no
+    # effect on the generated plan. Checking specific keys before the
+    # generic "vegetarian" fixes this.
     diet_token = DIET_TOKENS["non-vegetarian"]
-    for key in DIET_TOKENS:
-        if key in diet_raw or diet_raw in key:
-            diet_token = DIET_TOKENS[key]
-            break
+    if diet_raw in DIET_TOKENS:
+        diet_token = DIET_TOKENS[diet_raw]
+    else:
+        for key in ("non-vegetarian", "eggetarian", "vegan", "vegetarian"):
+            if key in diet_raw or diet_raw in key:
+                diet_token = DIET_TOKENS[key]
+                break
 
     # ── 4. Experience token
     exp_raw = profile.get("experience", "intermediate").lower()
-    exp_key = "intermediate"
-    for k in PROTEIN_MULTIPLIER:
-        if exp_raw.startswith(k[:3]):
-            exp_key = k
-            break
+    exp_key = _resolve_exp_key(profile)
     protein_mult_str = (
         f"{m['protein_multiplier']} g/kg "
         f"(computed for {exp_key} tier, band {PROTEIN_MULTIPLIER[exp_key][0]}–{PROTEIN_MULTIPLIER[exp_key][1]} g/kg, "
@@ -491,11 +532,18 @@ def build_user_prompt(profile: dict) -> str:
 
     # ── 6. Goal sentence
     goal = profile.get("goal", "fat loss")
-    goal_label = "Fat Loss Plan"
-    if "muscle" in goal.lower() or "bulk" in goal.lower() or "gain" in goal.lower():
+    goal_lower = goal.lower()
+    is_recovery_goal = any(t in goal_lower for t in ("recovery", "recover", "deload", "injury", "rehab"))
+    if "fat loss" in goal_lower or "weight loss" in goal_lower or "cut" in goal_lower:
+        goal_label = "Fat Loss Plan"
+    elif is_recovery_goal:
+        goal_label = "Recovery Plan"
+    elif "muscle" in goal_lower or "bulk" in goal_lower or "gain" in goal_lower:
         goal_label = "Muscle Gain Plan"
-    elif "maintain" in goal.lower():
+    elif "maintain" in goal_lower:
         goal_label = "Maintenance Plan"
+    else:
+        goal_label = "Fat Loss Plan"
 
     # ── 7. Profile-aware split recommendation (experience + days + duration +
     #      goal + BMI + activity — see split_engine.py for the full decision
@@ -580,6 +628,7 @@ The sum of kcal must be within ±80 kcal of {m['target_kcal']}.
 Client experience level: {profile.get('experience', 'Intermediate')} → training rigour MUST match this tier, not a generic plan.
 Design exactly {training_days_per_week} training days and {7 - training_days_per_week} rest day(s) per week.
 Session duration is {duration} — size the exercise volume accordingly.
+{"RECOVERY GOAL OVERRIDE: this client's goal is recovery/deload/rehab. Regardless of experience tier, stay well short of failure on every set (leave 3-4 reps in reserve), avoid ALL intensity techniques (no drop sets, no supersets, no rest-pause, no partials) even if the tier's intensity guidance below mentions them, and favour controlled tempo, full range of motion, and lighter loads over heavy loading." if is_recovery_goal else ""}
 
 AI SPLIT ANALYSIS
 
@@ -610,8 +659,17 @@ sequence above.
 Avoid free-weight barbell squat, deadlift, barbell bench press, overhead barbell press (injury risk) —
 use the machine/cable/dumbbell compound equivalents listed below instead.
 
-MUSCLE PRIORITY RULES (mandatory — bigger muscle groups get MORE exercises, not just trained
-"first and harder" — this directly sets the exercise COUNT per muscle group, not just ordering):
+SESSION STRUCTURE RULE (mandatory — applies to EVERY non-rest day):
+- Exercise #1 of the day, AND ONLY exercise #1, is a compound movement (see COMPOUND MOVEMENT
+  LIBRARY below) for that day's largest trained muscle group. Never more than one compound
+  movement per day, and never open a session with anything else.
+- EVERY exercise after the first ({exp_key} level → {vol['isolation_count']} of them) is
+  ISOLATION work — single-joint, single-muscle movements (lateral raises, curls, triceps
+  extensions, leg extensions/curls, calf raises, core/abs, etc.). Do not add a second compound
+  lift anywhere later in the day, even for a second muscle group trained that day.
+
+MUSCLE PRIORITY RULES (mandatory — bigger muscle groups get MORE isolation exercises, not just
+trained "first and harder" — this directly sets the isolation exercise COUNT per muscle group):
 
 Muscle size rank (1 = largest, 6 = smallest):
   1) Legs/Glutes (quads, hamstrings, glutes)
@@ -622,26 +680,24 @@ Muscle size rank (1 = largest, 6 = smallest):
   6) Calves / Core / small isolation
 
 ALLOCATION RULE — when a single training day works MORE THAN ONE muscle group from this list
-(e.g. a Push day works Chest + Shoulders + Triceps), distribute that day's total exercise count
-({vol['exercises_per_day']}) across the trained muscle groups in proportion to their rank:
-  - The HIGHEST-ranked (largest) muscle trained that day gets the MOST exercises — never fewer
-    exercises than any lower-ranked muscle trained the same day.
-  - As a concrete split for a day training 2 muscle groups: ~60% of exercises to the larger
-    group, ~40% to the smaller (round in favour of the larger group).
+(e.g. a Push day works Chest + Shoulders + Triceps), distribute that day's ISOLATION exercise
+count ({vol['isolation_count']}, i.e. everything after exercise #1) across the trained muscle
+groups in proportion to their rank:
+  - The HIGHEST-ranked (largest) muscle trained that day gets the MOST isolation exercises —
+    never fewer than any lower-ranked muscle trained the same day.
+  - As a concrete split for a day training 2 muscle groups: ~60% of the isolation slots to the
+    larger group, ~40% to the smaller (round in favour of the larger group).
   - For a day training 3 muscle groups: roughly 45% / 35% / 20% from largest to smallest.
-  - A muscle group ranked 5–6 (Arms, Calves, Core) NEVER receives more exercises in a single
-    day than a muscle group ranked 1–3 (Legs, Back, Chest) trained that same day.
-- Order each day's "exercises" array by this same rank, largest → smallest (compound movements
-  for the largest muscle group come first; isolation work for the smallest comes last).
-- A day's first 1–2 exercises must ALWAYS be a compound movement for that day's largest
-  trained muscle group (see COMPOUND MOVEMENT LIBRARY below) — never open a session with
-  an isolation exercise.
+  - A muscle group ranked 5–6 (Arms, Calves, Core) NEVER receives more isolation exercises in a
+    single day than a muscle group ranked 1–3 (Legs, Back, Chest) trained that same day.
+- Order each day's "exercises" array by this same rank, largest → smallest, with exercise #1
+  (the compound lift) always first.
 - Across the whole weekly split, Legs and Back (rank 1–2) must each appear in at least as many
   total weekly exercise slots as Arms alone (rank 5) — do not under-train the big muscle groups
   relative to the small ones over the course of the week.
 
-COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — use these as the opening 1–2
-exercises for the relevant muscle group instead of banned free-weight lifts):
+COMPOUND MOVEMENT LIBRARY (machine/cable/dumbbell-safe — use exactly ONE of these as exercise
+#1 of the day, for the relevant muscle group, instead of banned free-weight lifts):
   Legs    → Leg Press, Hack Squat Machine, Smith Machine Squat, Goblet Squat (dumbbell),
             Walking Lunges (dumbbell), Romanian Deadlift (dumbbell)
   Back    → Lat Pulldown, Seated Cable Row, Chest-Supported Machine Row, Assisted Pull-up,
@@ -649,13 +705,16 @@ exercises for the relevant muscle group instead of banned free-weight lifts):
   Chest   → Machine Chest Press, Incline Dumbbell Press, Flat Dumbbell Press, Smith Machine
             Bench Press
   Shoulders → Machine Shoulder Press, Seated Dumbbell Press, Arnold Press
-Isolation work (lateral raises, curls, triceps extensions, calf raises, core/abs) comes AFTER
-the compound movement(s) for that day, never before.
+Every exercise from #2 onward MUST be isolation work — never a second compound lift.
 
-EXERCISE VOLUME RULES (mandatory, scaled to {exp_key} level):
-- Exercises per training day: {vol['exercises_per_day']} (a single exercise per day is NEVER acceptable — every
-  non-rest day's "exercises" array must contain this many distinct movements, ordered compound → isolation,
-  AND ordered by muscle size per the MUSCLE PRIORITY RULES above).
+EXERCISE VOLUME RULES (mandatory, HARD CAP scaled to {exp_key} level — this is a ceiling, not a
+suggestion):
+- Exercises per training day: EXACTLY {vol['exercises_per_day']} total
+  ({vol['compound_count']} compound as exercise #1, then {vol['isolation_count']} isolation
+  exercises). A single exercise per day is NEVER acceptable, and going OVER this cap is also
+  invalid — every non-rest day's "exercises" array must contain exactly this many distinct
+  movements, ordered compound → isolation, AND ordered by muscle size per the MUSCLE PRIORITY
+  RULES above.
 - Sets per exercise: {vol['sets_per_exercise']}
 - Rest between sets: {vol['rest_between_sets']}
 - Intensity guidance: {vol['intensity_note']}
@@ -776,7 +835,7 @@ _RECOVERY_DEFAULT = {
 }
 
 
-def enforce_schema(data: dict) -> dict:
+def enforce_schema(data: dict, expected_exercise_count: int | None = None) -> dict:
     data.setdefault("user", {})
     data.setdefault("plan", {})
     data.setdefault("workout", {})
@@ -809,6 +868,9 @@ def enforce_schema(data: dict) -> dict:
     data["workout"].setdefault("days", [])
 
     # Ensure warmup_exercises exists on every non-rest day
+    # min_expected defaults to 3 (the lowest hard cap, beginner level) so a
+    # beginner day landing exactly on its cap of 3 is never wrongly flagged.
+    min_expected = expected_exercise_count if expected_exercise_count is not None else 3
     for day in data["workout"].get("days", []):
         if not day.get("is_rest", False):
             day.setdefault("warmup_exercises", [])
@@ -818,10 +880,10 @@ def enforce_schema(data: dict) -> dict:
                     "No warmup_exercises were generated for this training day "
                     "despite being mandatory — the LLM dropped this field."
                 )
-            if len(day["exercises"]) < 4:
+            if len(day["exercises"]) < min_expected:
                 day["_low_volume_warning"] = (
                     f"Only {len(day['exercises'])} exercise(s) generated for this day — "
-                    f"below the requested minimum. Consider regenerating."
+                    f"below the requested minimum of {min_expected}. Consider regenerating."
                 )
 
     # Ensure each meal has full macro fields
@@ -857,5 +919,6 @@ def generate_dashboard(profile: dict, llm_caller) -> str:
     user_prompt  = build_user_prompt(profile)
     raw_response = llm_caller(SYSTEM_PROMPT, user_prompt)
     data = parse_llm_json(raw_response)
-    data = enforce_schema(data)
+    exp_key = _resolve_exp_key(profile)
+    data = enforce_schema(data, expected_exercise_count=MIN_EXERCISES.get(exp_key, 3))
     return render_dashboard(data)
