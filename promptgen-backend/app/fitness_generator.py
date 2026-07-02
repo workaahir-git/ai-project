@@ -24,7 +24,7 @@ import re
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
-from split_engine import recommend_split, SPLIT_LIBRARY
+from .split_engine import recommend_split, SPLIT_LIBRARY
 
 
 # ── TEMPLATE DIR ─────────────────────────────────────────────────────────────
