@@ -296,8 +296,14 @@ def _decide(
 
         if capped_days == 3:
             # Cell: rows 5, 6, 7, 9, 10 all cover 3 for Beginner.
-            if goals["fat_loss"] or goals["confidence_building"]:
+            # NOTE: fat_loss no longer routes to machine_based (fullbody) here.
+            # Fullbody-every-day is reserved for the <=2-days-available case
+            # (capped_days == 2, above). At 3+ days, fat-loss beginners get a
+            # real split with movement variety instead.
+            if goals["confidence_building"]:
                 return _cycle_split("machine_based", capped_days)      # Row 10
+            if goals["fat_loss"]:
+                return _cycle_split("legs_push_pull", capped_days)      # Row 7
             if goals["strength"]:
                 return _cycle_split("foundation_strength", capped_days)  # Row 9
             if goals["muscle_gain"] or goals["bodybuilding"]:
@@ -306,8 +312,13 @@ def _decide(
 
         # capped_days == 4
         # Cell: rows 5, 8, 9, 10 all cover 4 for Beginner.
-        if goals["fat_loss"] or goals["confidence_building"]:
+        # Same reasoning as capped_days==3: fat_loss should get a varied
+        # split at 4 days/week, not fullbody. Only confidence_building (not
+        # tied to a day-count) still gets the gentler machine_based split.
+        if goals["confidence_building"]:
             return _cycle_split("machine_based", capped_days)          # Row 10
+        if goals["fat_loss"]:
+            return _cycle_split("beginner_bodybuilding", capped_days)   # Row 8
         if goals["strength"]:
             return _cycle_split("foundation_strength", capped_days)     # Row 9
         if goals["muscle_gain"] or goals["bodybuilding"]:
