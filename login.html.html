@@ -4,29 +4,36 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GymCoach Studio</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
     min-height: 100vh;
-    background: #f1f5f9;
-    color: #0f172a;
+    background: #0a0714;
+    color: #f8fafc;
     font-family: 'Inter', sans-serif;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 24px 16px;
+    position: relative;
+    overflow-x: hidden;
   }
+
+  .glow { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+  .glow span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .28; }
+  .glow .a { width: 420px; height: 420px; top: -120px; left: -120px; background: linear-gradient(135deg,#a855f7,#6366f1); }
+  .glow .b { width: 460px; height: 460px; bottom: -140px; right: -120px; background: linear-gradient(135deg,#6366f1,#a855f7); opacity: .2; }
 
   .card {
     width: 100%;
     max-width: 420px;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
+    background: #150f24;
+    border: 1px solid rgba(139,92,246,.18);
     border-radius: 20px;
     padding: 32px 28px;
-    box-shadow: 0 4px 24px #0000000a;
+    box-shadow: 0 20px 60px -20px rgba(0,0,0,.6);
   }
 
   .logo {
@@ -40,29 +47,29 @@
   .logo-icon {
     width: 38px;
     height: 38px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 10px;
+    background: linear-gradient(135deg,#a855f7,#6366f1);
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 18px;
+    box-shadow: 0 8px 24px -8px rgba(139,92,246,.6);
   }
 
   .logo-text {
     font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
+    font-weight: 800;
+    color: #f8fafc;
     letter-spacing: -0.3px;
   }
 
-  .logo-text span { color: #1d4ed8; }
+  .logo-text span { font-family:'Baloo 2',cursive; font-style: italic; font-weight: 600; color: #c4b5fd; }
 
   /* TABS */
   .tabs {
     display: flex;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: #0f0a1c;
+    border: 1px solid rgba(139,92,246,.18);
     border-radius: 12px;
     padding: 4px;
     margin-bottom: 28px;
@@ -75,7 +82,7 @@
     background: none;
     border-radius: 9px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     color: #94a3b8;
     cursor: pointer;
     transition: all 0.2s;
@@ -84,7 +91,7 @@
   }
 
   .tab.active {
-    background: #1d4ed8;
+    background: linear-gradient(135deg,#a855f7,#6366f1);
     color: #ffffff;
   }
 
@@ -92,14 +99,14 @@
   .form-heading {
     font-size: 22px;
     font-weight: 800;
-    color: #0f172a;
+    color: #f8fafc;
     margin-bottom: 4px;
     letter-spacing: -0.4px;
   }
 
   .form-sub {
     font-size: 13px;
-    color: #94a3b8;
+    color: #64748b;
     margin-bottom: 24px;
   }
 
@@ -111,38 +118,53 @@
   .field label {
     display: block;
     font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
+    font-weight: 700;
+    color: #94a3b8;
     letter-spacing: 1px;
     text-transform: uppercase;
     margin-bottom: 6px;
   }
 
+  .field-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .field-input svg {
+    position: absolute;
+    left: 14px;
+    width: 16px;
+    height: 16px;
+    stroke: #64748b;
+    pointer-events: none;
+  }
+
   .field input {
     width: 100%;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: #0f0a1c;
+    border: 1px solid rgba(139,92,246,.18);
     border-radius: 10px;
-    padding: 12px 14px;
+    padding: 12px 14px 12px 40px;
     font-size: 14px;
-    color: #0f172a;
+    color: #f8fafc;
     font-family: 'Inter', sans-serif;
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
   }
 
-  .field input::placeholder { color: #cbd5e1; }
+  .field input::placeholder { color: #475569; }
 
   .field input:focus {
-    border-color: #1d4ed8;
-    box-shadow: 0 0 0 3px #1d4ed820;
+    border-color: #a855f7;
+    box-shadow: 0 0 0 3px rgba(168,85,247,.2);
   }
 
   /* BUTTON */
   .btn {
     width: 100%;
     padding: 13px;
-    background: #1e293b;
+    background: linear-gradient(135deg,#a855f7,#6366f1);
     color: #fff;
     border: none;
     border-radius: 10px;
@@ -151,37 +173,61 @@
     cursor: pointer;
     font-family: 'Inter', sans-serif;
     margin-top: 8px;
-    transition: background 0.2s, transform 0.1s;
+    transition: transform 0.15s, filter 0.2s;
     letter-spacing: 0.2px;
+    box-shadow: 0 14px 34px -14px rgba(139,92,246,.6);
   }
 
-  .btn:hover { background: #334155; }
+  .btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
   .btn:active { transform: scale(0.98); }
 
   /* SWITCH LINK */
   .switch-text {
     text-align: center;
     font-size: 13px;
-    color: #94a3b8;
+    color: #64748b;
     margin-top: 20px;
   }
 
   .switch-text span {
-    color: #1d4ed8;
+    color: #c4b5fd;
     cursor: pointer;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .switch-text span:hover { text-decoration: underline; }
 
+  /* DEMO BUTTON */
+  .demo-divider {
+    border: none;
+    border-top: 1px solid rgba(139,92,246,.18);
+    margin: 22px 0 16px;
+  }
+
+  .demo-btn {
+    width: 100%;
+    padding: 12px;
+    background: rgba(139,92,246,.1);
+    border: 1px solid rgba(139,92,246,.3);
+    color: #c4b5fd;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: background 0.2s;
+  }
+
+  .demo-btn:hover { background: rgba(139,92,246,.18); }
+
   /* ERROR */
   .error-msg {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
+    background: rgba(239,68,68,.08);
+    border: 1px solid rgba(239,68,68,.35);
     border-radius: 8px;
     padding: 10px 14px;
     font-size: 12px;
-    color: #ef4444;
+    color: #f87171;
     margin-bottom: 14px;
     display: none;
   }
@@ -194,17 +240,19 @@
 </head>
 
 <body>
+<div class="glow"><span class="a"></span><span class="b"></span></div>
+
 <div class="card">
 
   <div class="logo">
     <div class="logo-icon">💪</div>
-    <div class="logo-text">GymCoach <span>Studio</span></div>
+    <div class="logo-text">GymCoach<span>.studio</span></div>
   </div>
 
   <!-- TABS -->
   <div class="tabs">
-    <button class="tab active" id="loginTab">Login</button>
-    <button class="tab" id="signupTab">Sign Up</button>
+    <button class="tab active" id="loginTab">Log in</button>
+    <button class="tab" id="signupTab">Sign up</button>
   </div>
 
   <!-- ERROR -->
@@ -217,12 +265,18 @@
 
     <div class="field">
       <label>Email</label>
-      <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+      <div class="field-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><path d="M2 6h20v12H2z"/></svg>
+        <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
     </div>
 
     <div class="field">
       <label>Password</label>
-      <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+      <div class="field-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
     </div>
 
     <button class="btn" id="loginBtn">Log in</button>
@@ -230,6 +284,9 @@
     <div class="switch-text">
       No account? <span id="goSignup">Create one</span>
     </div>
+
+    <hr class="demo-divider">
+    <button class="demo-btn" id="demoBtn">✦ Try with demo account</button>
   </div>
 
   <!-- SIGNUP FORM -->
@@ -239,25 +296,37 @@
 
     <div class="field">
       <label>Username</label>
-      <input id="signupUsername" type="text" placeholder="Your gym name">
+      <div class="field-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <input id="signupUsername" type="text" placeholder="Your gym name">
+      </div>
     </div>
 
     <div class="field">
       <label>Email</label>
-      <input id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email">
+      <div class="field-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 6l-10 7L2 6"/><path d="M2 6h20v12H2z"/></svg>
+        <input id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
     </div>
 
     <div class="field">
       <label>Password</label>
-      <input id="signupPassword" type="password" placeholder="Min. 6 characters">
+      <div class="field-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <input id="signupPassword" type="password" placeholder="Min. 6 characters">
+      </div>
     </div>
 
     <div class="field">
-      <label>Confirm Password</label>
-      <input id="confirmPassword" type="password" placeholder="Repeat password">
+      <label>Confirm password</label>
+      <div class="field-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <input id="confirmPassword" type="password" placeholder="Repeat password">
+      </div>
     </div>
 
-    <button class="btn" id="signupBtn">Create Account</button>
+    <button class="btn" id="signupBtn">Create account</button>
 
     <div class="switch-text">
       Already have an account? <span id="goLogin">Log in</span>
@@ -319,12 +388,8 @@ signupTab.addEventListener('click', showSignup)
 document.getElementById('goSignup').addEventListener('click', showSignup)
 document.getElementById('goLogin').addEventListener('click', showLogin)
 
-// LOGIN
-document.getElementById('loginBtn').addEventListener('click', async () => {
+async function doLogin(email, password) {
   hideError()
-  const email    = document.getElementById('loginEmail').value.trim()
-  const password = document.getElementById('loginPassword').value
-
   if (!email || !password) { showError('Please fill in all fields'); return }
 
   const btn = document.getElementById('loginBtn')
@@ -339,6 +404,20 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
   if (error) { showError(error.message); return }
 
   window.location.href = 'dashbord.html'
+}
+
+// LOGIN
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const email    = document.getElementById('loginEmail').value.trim()
+  const password = document.getElementById('loginPassword').value
+  await doLogin(email, password)
+})
+
+// DEMO ACCOUNT — fills + submits with demo credentials
+document.getElementById('demoBtn').addEventListener('click', async () => {
+  document.getElementById('loginEmail').value = 'demo@gymcoach.studio'
+  document.getElementById('loginPassword').value = 'demo1234'
+  await doLogin('demo@gymcoach.studio', 'demo1234')
 })
 
 // SIGNUP
@@ -360,7 +439,7 @@ document.getElementById('signupBtn').addEventListener('click', async () => {
 
   const { error } = await supabase.auth.signUp({ email, password })
 
-  btn.textContent = 'Create Account'
+  btn.textContent = 'Create account'
   btn.classList.remove('loading')
 
   if (error) { showError(error.message); return }
