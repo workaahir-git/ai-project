@@ -27,6 +27,10 @@ async def generate_with_ollama(prompt: str, system: str | None = None) -> str:
             ),
             timeout=GEMINI_TIMEOUT_SECONDS,
         )
+        print(f"[TOKEN USAGE] prompt={response.usage_metadata.prompt_token_count} "
+      f"thinking={response.usage_metadata.thoughts_token_count} "
+      f"output={response.usage_metadata.candidates_token_count} "
+      f"total={response.usage_metadata.total_token_count}")
 
         return response.text or ""
 
