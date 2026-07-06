@@ -189,6 +189,7 @@ TOKEN_MUSCLE_MAP = {
 _MUSCLE_RANK = {
     "legs": 1, "back": 2, "chest": 3, "shoulders": 4,
     "biceps": 5, "triceps": 5, "arms": 5,
+    "traps": 6,
     "calves": 6, "core": 6,
 }
 _BIG_MUSCLES = {"legs", "back", "chest", "shoulders"}
@@ -213,7 +214,7 @@ def _parse_low_int(val, default: int) -> int:
     return int(nums[0]) if nums else default
 
 
-def _compute_day_plan(token: str, vol: dict) -> dict:
+def _compute_day_plan(token: str, vol: dict, exp_key: str = "intermediate") -> dict:
     """
     Precompute the EXACT exercise breakdown for one training day so the LLM
     never has to do proportional math. Returns a dict:
@@ -228,8 +229,13 @@ def _compute_day_plan(token: str, vol: dict) -> dict:
       • arm floor: biceps/triceps each get >= ARM_ISOLATION_FLOOR isolation if trained
       • remaining isolation slots distributed largest→smallest, never giving a
         rank 5–6 muscle more isolation than a rank 1–3 muscle trained the same day
+      • pull day gets a trailing traps slot, but ONLY for intermediate/advanced
+        (exp_key is the same beginner/intermediate/advanced tier used everywhere
+        else — see _resolve_exp_key()); beginners never see traps at all.
     """
-    muscles = TOKEN_MUSCLE_MAP.get(token, [])
+    muscles = list(TOKEN_MUSCLE_MAP.get(token, []))
+    if token == "pull" and exp_key in ("intermediate", "advanced"):
+        muscles.append("traps")
     if not muscles:  # cardio / rest / unknown
         return {
             "muscles": [], "compound_count": 0,
@@ -277,7 +283,7 @@ def _compute_day_plan(token: str, vol: dict) -> dict:
     }
 
 
-def _render_day_plan_table(sequence: list, vol: dict) -> str:
+def _render_day_plan_table(sequence: list, vol: dict, exp_key: str = "intermediate") -> str:
     """
     Turn the split sequence into a literal, per-day fill-in checklist the LLM
     must obey verbatim — no math left for the model to do.
@@ -294,7 +300,7 @@ def _render_day_plan_table(sequence: list, vol: dict) -> str:
             )
             continue
 
-        plan = _compute_day_plan(token, vol)
+        plan = _compute_day_plan(token, vol, exp_key)
         parts = []
         # compounds first (largest big group's compound first)
         for m in plan["muscles"]:
@@ -352,6 +358,7 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
     equipment_raw = profile.get("equipment", "full gym")
     notes_raw = profile.get("medical_notes") or profile.get("notes") or ""
     experience_raw = profile.get("experience", "Intermediate")
+    exp_key = _resolve_exp_key(profile)
     rng = random.Random()
 
     days = []
@@ -369,7 +376,7 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
             })
             continue
 
-        plan = _compute_day_plan(token, vol)
+        plan = _compute_day_plan(token, vol, exp_key)
         picks, _used_fallback = select_day_exercises(
             plan, equipment_raw, notes_raw, experience_raw, rng,
         )
@@ -923,7 +930,7 @@ def build_user_prompt(profile: dict) -> str:
     #      This is the authoritative fix for "no squats on Legs day" and
     #      "only 1 chest exercise on Push day": counts + compounds are decided
     #      here in Python and handed to the LLM as a literal fill-in list.
-    day_plan_table = _render_day_plan_table(weekly_template, vol)
+    day_plan_table = _render_day_plan_table(weekly_template, vol, exp_key)
 
     return f"""
 CLIENT PROFILE — read every line carefully; ALL of it must be reflected in the JSON you return.

@@ -200,6 +200,17 @@ EXERCISE_DB = {
             {"name": "Pallof Press (band)",                 "requires": "Resistance bands",        "cue": "Resist rotation, slow tempo"},
         ],
     },
+    "traps": {
+        # Intermediate/advanced pull-day accessory only — gated in
+        # select_day_exercises() regardless of what the caller's plan
+        # passes in, so this pool never fires for beginners.
+        "isolation": [
+            {"name": "Dumbbell Shrug",                 "requires": "Dumbbells",                  "cue": "Straight up and down, no rolling, pause at top"},
+            {"name": "Cable Shrug",                    "requires": "Cable machine (dual stack)", "cue": "Squeeze traps at top, controlled negative"},
+            {"name": "Smith Machine Shrug",             "requires": "Smith machine",              "cue": "Full range, pause 1 sec at top"},
+            {"name": "Band Shrug",                      "requires": "Resistance bands",           "cue": "Constant tension, squeeze at top"},
+        ],
+    },
 }
 
 
@@ -265,11 +276,12 @@ MUSCLE_PRIORITY = {
     "legs": 0,
     "back": 1,
     "chest": 2,
-    "shoulders": 3,
-    "biceps": 4,
-    "triceps": 4,
-    "calves": 5,
-    "core": 5,
+    "triceps": 3,   # push day: chest > triceps > shoulders
+    "shoulders": 4,
+    "biceps": 5,    # pull day: back > biceps > traps
+    "traps": 6,
+    "calves": 7,
+    "core": 7,
 }
 
 
@@ -291,7 +303,7 @@ def _experience_rank(experience_raw: str) -> int:
 # the day; they never remove the mandatory compound lift(s) for a trained
 # muscle — only trim from the isolation wishlist, smallest-priority muscle
 # first, so what gets cut is "extra" isolation work, never the main lift.
-BEGINNER_CAP_LEG_DAY = 3
+BEGINNER_CAP_LEG_DAY = 6
 BEGINNER_CAP_OTHER_DAY = 5
 
 
@@ -323,7 +335,7 @@ def select_day_exercises(
           which individual exercises are allowed.
 
     CAP LOGIC (beginners only):
-        Beginner leg days cap at 3 total exercises; every other beginner
+        Beginner leg days cap at 6 total exercises; every other beginner
         day type caps at 5. The mandatory compound lift(s) for each big
         muscle trained that day are NEVER cut to make room under the cap
         — only isolation work is trimmed, and it's trimmed starting from
@@ -370,6 +382,10 @@ def select_day_exercises(
     #    drops the smallest-priority muscle's isolation work first.
     isolation_wishlist = []
     for m in ordered_muscles:
+        if m == "traps" and experience_rank == 0:
+            # Traps accessory work is intermediate/advanced only, no
+            # matter what the caller's plan says.
+            continue
         n = plan["isolation_by_muscle"].get(m, 0)
         if n <= 0:
             continue
