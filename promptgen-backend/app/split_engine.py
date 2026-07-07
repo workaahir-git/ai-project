@@ -138,6 +138,21 @@ SPLIT_LIBRARY = {
         "mode": "cyclic",
         "pattern": ["push", "pull", "legs"],
     },
+    # -- Master_Workout_Split_Table.md §3.2 (Upper/Lower, 4 days) -------------
+    # Added for the new master-doc decision tree (see recommend_split_master
+    # / programming_rules.SPLIT_DECISION below). Cyclic so it also serves the
+    # 2-day "Upper A / Lower A" minimal case if ever requested directly.
+    "upper_lower": {
+        "display_name": "Upper / Lower",
+        "mode": "cyclic",
+        "pattern": ["upper", "lower"],
+    },
+    # -- Master_Workout_Split_Table.md §3.4 (PPL + Upper/Lower Hybrid, 5 days)
+    "ppl_upper_lower_hybrid": {
+        "display_name": "PPL + Upper/Lower Hybrid",
+        "mode": "fixed",
+        "pattern": ["push", "pull", "legs", "upper", "lower"],
+    },
     # -- row 9 (Torso/Limbs, Int, 4) -----------------------------------
     "torso_limbs": {
         "display_name": "Torso / Limbs",
@@ -552,8 +567,10 @@ def _decide(
     return _cycle_split("full_body", max(days, 1))
 
 
-# ── PUBLIC ENTRY POINT ────────────────────────────────────────────────────────
-def recommend_split(profile: dict) -> dict:
+# ── LEGACY ENTRY POINT (24-row message.txt table) ───────────────────────────
+# Kept for reference / rollback. The active default is now
+# recommend_split_master() below, built from 1_Master_Workout_Split_Table.md.
+def _recommend_split_legacy_24row(profile: dict) -> dict:
     """
     profile keys used (all optional except experience/days_per_week/goal):
         experience         : "beginner" | "intermediate" | "advanced"
@@ -599,3 +616,90 @@ def recommend_split(profile: dict) -> dict:
         "sequence": final["sequence"],
         "reason": reason,
     }
+
+
+# ── MASTER-DOC ENTRY POINT (1_Master_Workout_Split_Table.md, §2) ───────────
+def _decide_master(training_age_yrs: float, days: int, goals: dict) -> dict:
+    """
+    Implements the decision tree in 1_Master_Workout_Split_Table.md §2
+    literally, branch for branch. `days` is the raw requested days/week —
+    the master doc's tree does not apply the activity ±1 adjustment used by
+    the legacy table, so none is applied here.
+
+    Two hardwired rules from the doc are enforced unconditionally, matching
+    its own language ("this is a hardwired rule, not a preference"):
+      - never assign Bro Split under 2 years training age (§2 coach note)
+      - never program 7 hard days for a natural lifter (§2, days==7 branch)
+    """
+    if days <= 2:
+        return _cycle_split("full_body", max(days, 1))          # §2: Minimalist 2-Day Full Body
+
+    if days == 3:
+        if training_age_yrs < 1:
+            return _cycle_split("full_body", 3)                  # Full Body A/B/C
+        if goals["strength"]:
+            return _cycle_split("full_body", 3)                  # "Full Body (if strength-focused)"
+        return _cycle_split("ppl", 3)                             # PPL (3-day)
+
+    if days == 4:
+        if goals["strength"]:
+            return _cycle_split("compound_strength", 4)          # Squat/Bench/Deadlift 4-day
+        return _cycle_split("upper_lower", 4)                     # Upper/Lower (hypertrophy default)
+
+    if days == 5:
+        if training_age_yrs >= 5 and goals["priority"]:
+            return _cycle_split("bro_split", 5)                   # explicit specialization signal only
+        return _cycle_split("ppl_upper_lower_hybrid", 5)          # default for <2yr and >=2yr hypertrophy alike
+
+    if days == 6:
+        return _cycle_split("ppl_x2", 6)                          # PPL x2 (6-day) — standard int-adv
+
+    # days >= 7 — hardwired: never program 7 hard days for a natural lifter.
+    six_day = _cycle_split("ppl_x2", 6)
+    return {
+        "split_name": six_day["split_name"] + " + Active Recovery Day",
+        "sequence": six_day["sequence"] + ["mobility"],
+        "_key": six_day["_key"],
+    }
+
+
+def recommend_split_master(profile: dict) -> dict:
+    """
+    Default split-selection entry point, built directly from
+    1_Master_Workout_Split_Table.md §2's decision tree (see _decide_master).
+    Signature and return shape match the legacy recommend_split() so callers
+    (fitness_generator.py) need no changes beyond the import.
+    """
+    from . import programming_rules
+
+    raw_days = int(profile.get("days_per_week", 4))
+    days = max(1, min(7, raw_days))
+    goals = _goal_flags(profile.get("goal", ""))
+    training_age_yrs = programming_rules.training_age_years(profile)
+
+    # Recovery goal: doc 1 has no dedicated recovery row; keep the same
+    # lowest-fatigue fallback the legacy table used, since it's still the
+    # most defensible choice available in this split library.
+    if goals["recovery"]:
+        final = _cycle_split("machine_based", min(days, 4)) if days <= 4 else _cycle_split("torso_limbs", days)
+    else:
+        final = _decide_master(training_age_yrs, days, goals)
+
+    goal_desc = profile.get("goal", "general fitness")
+    reason = (
+        f"~{training_age_yrs:g} yrs training age, {raw_days} days/week, "
+        f"{goal_desc} — per Master Workout Split Table §2 decision tree."
+    )
+
+    return {
+        "split_name": final["split_name"],
+        "sequence": final["sequence"],
+        "reason": reason,
+    }
+
+
+# recommend_split() is the name every other module imports. It now points at
+# the master-doc tree by default; call _recommend_split_legacy_24row directly
+# if you need the old table for comparison/testing.
+def recommend_split(profile: dict) -> dict:
+    return recommend_split_master(profile)

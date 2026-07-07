@@ -34,11 +34,16 @@ import re
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
-from .split_engine import recommend_split, SPLIT_LIBRARY
+from .split_engine import recommend_split, SPLIT_LIBRARY, _session_minutes
 from .exercise_database import (
     select_day_exercises,
     MUSCLE_PRIORITY,
     BEGINNER_CAP_LEG_DAY as BEGINNER_LEG_DAY_TARGET_TOTAL,
+)
+from .programming_rules import (
+    weekly_volume_target,
+    sets_reps_rest_for_goal,
+    session_duration_cap,
 )
 
 
@@ -322,7 +327,39 @@ def _parse_low_int(val, default: int) -> int:
     return int(nums[0]) if nums else default
 
 
-def _compute_day_plan(token: str, vol: dict, exp_key: str = "intermediate") -> dict:
+def _muscle_frequency(sequence: list, exp_key: str) -> dict:
+    """
+    Counts how many days/week each muscle is trained, given the FULL split
+    sequence for the week. This is the "frequency" input the Weekly Muscle
+    Volume table (8_Weekly_Muscle_Volume.md §3) needs to convert a weekly
+    set target into a per-session set target — a muscle trained 2x/week
+    needs half the isolation work per session that a muscle trained 1x/week
+    does to hit the same weekly total.
+    Mirrors the same muscle-list expansion _compute_day_plan uses per-token
+    (traps added to pull days for int/adv, beginner fixed-plan muscle lists)
+    so frequency counting and per-day counting never disagree.
+    """
+    freq = {}
+    for token in sequence:
+        if exp_key == "beginner" and token in BEGINNER_FIXED_DAY_PLANS:
+            muscles = BEGINNER_FIXED_DAY_PLANS[token]["muscles"]
+        else:
+            muscles = list(TOKEN_MUSCLE_MAP.get(token, []))
+            if token == "pull" and exp_key in ("intermediate", "advanced"):
+                muscles.append("traps")
+        for m in muscles:
+            freq[m] = freq.get(m, 0) + 1
+    return freq
+
+
+def _compute_day_plan(
+    token: str,
+    vol: dict,
+    exp_key: str = "intermediate",
+    goal: str = "",
+    muscle_frequency: dict | None = None,
+    session_minutes: int | None = None,
+) -> dict:
     """
     Precompute the EXACT exercise breakdown for one training day so the LLM
     never has to do proportional math. Returns a dict:
@@ -457,8 +494,67 @@ def _compute_day_plan(token: str, vol: dict, exp_key: str = "intermediate") -> d
                 else:
                     donor_idx -= 1
 
+    # ── VOLUME-DRIVEN OVERRIDE (8_Weekly_Muscle_Volume.md §2 + §6) ─────────
+    # Replaces the flat per-tier isolation_by_muscle computed above with a
+    # count derived from each muscle's actual weekly MEV/MAV target divided
+    # by how many times/week the chosen split trains it. This is what makes
+    # exercise count scale with the NUMBER of muscles trained in a session
+    # (an upper day training 5 muscles gets 5 independently-sized isolation
+    # counts, not one shared flat budget) instead of a fixed per-day cap.
+    # Only runs when a caller supplies muscle_frequency (both current call
+    # sites now do); falls back to the logic above otherwise so nothing
+    # that doesn't pass it breaks.
+    if muscle_frequency is not None:
+        sets_per_ex = sets_reps_rest_for_goal(goal)["sets_per_exercise"]
+        for m in muscles:
+            freq = max(muscle_frequency.get(m, 1), 1)
+            weekly_target = weekly_volume_target(m, exp_key, goal)
+            if weekly_target <= 0:
+                continue
+            sets_needed_this_session = weekly_target / freq
+            compound_sets_here = sets_per_ex if m in big_trained else 0
+            iso_sets_needed = max(sets_needed_this_session - compound_sets_here, 0)
+            iso_count = math.ceil(iso_sets_needed / sets_per_ex) if sets_per_ex else 0
+            if m in _ARM_MUSCLES:
+                iso_count = max(iso_count, ARM_ISOLATION_FLOOR)
+            isolation_by_muscle[m] = iso_count
+
     total_iso = sum(isolation_by_muscle.values())
     total_exercises = compound_count + total_iso
+
+    # ── SESSION DURATION CAP (1_Master_Workout_Split_Table.md §4) ──────────
+    # Applies across ALL experience tiers (the doc's table isn't beginner-
+    # specific) — trims isolation only, smallest-priority muscle first,
+    # same trim direction exercise_database.py already uses for the
+    # beginner-only cap, so the two caps never disagree about what gets cut.
+    if session_minutes is not None and total_exercises > 0:
+        cap = session_duration_cap(session_minutes)
+        if total_exercises > cap:
+            overflow = total_exercises - cap
+            # pass 1: trim every muscle down to its protected floor (arm
+            # muscles keep ARM_ISOLATION_FLOOR, everything else can go to 0),
+            # smallest-priority muscle first — this is what stops a 5-muscle
+            # combined day (e.g. "upper") from silently trimming arm work to
+            # zero just because it's last in priority order.
+            for m in reversed(muscles):
+                if overflow <= 0:
+                    break
+                floor = ARM_ISOLATION_FLOOR if m in _ARM_MUSCLES else 0
+                cut = min(max(isolation_by_muscle[m] - floor, 0), overflow)
+                isolation_by_muscle[m] -= cut
+                overflow -= cut
+            # pass 2: only if the session is genuinely too short even for
+            # floor-only isolation, trim below the arm floor too, as a last
+            # resort — still smallest-priority-muscle first.
+            if overflow > 0:
+                for m in reversed(muscles):
+                    if overflow <= 0:
+                        break
+                    cut = min(isolation_by_muscle[m], overflow)
+                    isolation_by_muscle[m] -= cut
+                    overflow -= cut
+            total_iso = sum(isolation_by_muscle.values())
+            total_exercises = compound_count + total_iso
 
     return {
         "muscles": muscles,
@@ -468,11 +564,18 @@ def _compute_day_plan(token: str, vol: dict, exp_key: str = "intermediate") -> d
     }
 
 
-def _render_day_plan_table(sequence: list, vol: dict, exp_key: str = "intermediate") -> str:
+def _render_day_plan_table(
+    sequence: list,
+    vol: dict,
+    exp_key: str = "intermediate",
+    goal: str = "",
+    session_minutes: int | None = None,
+) -> str:
     """
     Turn the split sequence into a literal, per-day fill-in checklist the LLM
     must obey verbatim — no math left for the model to do.
     """
+    muscle_frequency = _muscle_frequency(sequence, exp_key)
     lines = []
     for idx, token in enumerate(sequence, start=1):
         if token == "rest":
@@ -485,7 +588,10 @@ def _render_day_plan_table(sequence: list, vol: dict, exp_key: str = "intermedia
             )
             continue
 
-        plan = _compute_day_plan(token, vol, exp_key)
+        plan = _compute_day_plan(
+            token, vol, exp_key,
+            goal=goal, muscle_frequency=muscle_frequency, session_minutes=session_minutes,
+        )
         parts = []
         # compounds first (largest big group's compound first). Some day
         # types (e.g. beginner push/pull/legs) specify EXACTLY which
@@ -551,6 +657,9 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
     notes_raw = profile.get("medical_notes") or profile.get("notes") or ""
     experience_raw = profile.get("experience", "Intermediate")
     exp_key = _resolve_exp_key(profile)
+    goal = profile.get("goal", "")
+    session_minutes = _session_minutes(profile.get("session_duration"))
+    muscle_frequency = _muscle_frequency(weekly_template, exp_key)
     rng = random.Random()
 
     days = []
@@ -568,19 +677,27 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
             })
             continue
 
-        plan = _compute_day_plan(token, vol, exp_key)
+        plan = _compute_day_plan(
+            token, vol, exp_key,
+            goal=goal, muscle_frequency=muscle_frequency, session_minutes=session_minutes,
+        )
         picks, _used_fallback = select_day_exercises(
             plan, equipment_raw, notes_raw, experience_raw, rng,
         )
 
+        # Sets/rest now come from 2_Programming_Rules.md §1 (goal-based),
+        # not just the flat per-tier vol[] table — a fat-loss client and a
+        # muscle-gain client at the same experience tier get different
+        # rest/rep prescriptions, matching the doc's own table.
+        goal_prescription = sets_reps_rest_for_goal(goal)
         exercises = []
         for p in picks:
             exercises.append({
                 "name": p["name"],
                 "muscle": p["muscle"].title(),
-                "sets": vol["sets_per_exercise"],
+                "sets": goal_prescription["sets_per_exercise"],
                 "reps": _REP_RANGE_BY_SLOT[p["slot"]],
-                "rest": vol["rest_between_sets"],
+                "rest": goal_prescription["rest"],
                 "tempo_or_cue": p["cue"],
             })
 
@@ -1156,7 +1273,10 @@ def build_user_prompt(profile: dict) -> str:
     #      This is the authoritative fix for "no squats on Legs day" and
     #      "only 1 chest exercise on Push day": counts + compounds are decided
     #      here in Python and handed to the LLM as a literal fill-in list.
-    day_plan_table = _render_day_plan_table(weekly_template, vol, exp_key)
+    day_plan_table = _render_day_plan_table(
+        weekly_template, vol, exp_key,
+        goal=goal, session_minutes=_session_minutes(duration),
+    )
 
     return f"""
 CLIENT PROFILE — read every line carefully; ALL of it must be reflected in the JSON you return.
