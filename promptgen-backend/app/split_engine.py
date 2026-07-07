@@ -2,29 +2,59 @@
 split_engine.py
 ──────────────────────────────────────────────────────────────────────────────
 STRICT rule-engine built directly from message.txt (the workout-split
-reference table). Every branch in _decide() cites the exact row(s) of
-message.txt that justify it. No split is invented that isn't in the table,
-and no split is offered outside the Experience / Days-per-week cell it
-belongs to in the table.
+reference table, 24 rows — see below). Every branch in _decide() cites the
+exact row(s) of message.txt that justify it. No split is invented that isn't
+in the table, and no split is offered outside the Experience / Days-per-week
+cell it belongs to in the table.
 
-message.txt table (source of truth) — 17 rows:
-    1.  Push / Pull / Legs (PPL)                     Int–Adv   3–6
-    2.  PPL x2                                        Adv       6
-    3.  Bro Split                                      Int–Adv  5–6
-    4.  Arnold Split                                    Adv      6
-    5.  Push / Pull                                     Beg–Int  2–4
-    6.  Push / Legs / Pull                              Beg–Int  3
-    7.  Legs / Push / Pull                              Beg–Int  3
-    8.  Beginner Bodybuilding Split                     Beg      4
-    9.  Foundation Strength Split                       Beg      3–4
-    10. Machine-Based Split                             Beg      2–4
-    11. Torso / Limbs                                   Int–Adv  4
-    12. Body Part Priority Split                        Adv      5–6
-    13. PHAT                                            Adv      5
-    14. Powerbuilding Split                             Int–Adv  4–6
-    15. PHUL                                            Int      4
-    16. Modified Bro Split                              Int–Adv  5–6
-    17. Advanced Arnold + Power Hybrid                   Adv      6
+message.txt table (source of truth) — 24 rows, Day-columns preserved:
+    1.  Push / Pull                        Beg       2–4   Push, Pull
+    2.  Push / Legs / Pull                 Beg       3     Push, Legs, Pull
+    3.  Legs / Push / Pull                 Beg       3     Legs, Push, Pull
+    4.  Beginner Bodybuilding               Beg       4     Chest+Tri, Back+Bi, Legs, Shoulders+Abs
+    5.  Machine-Based Split                 Beg       2–4   UpperMach, LowerMach, (Rest), FullMach, Cardio+Core
+    6.  Compound Strength Split             Beg       3–4   Squat, Bench, Deadlift, OHP+Access.
+    7.  Strength Foundation Split           Beg       3–4   Push, Pull, Legs, Full Accessory
+    8.  Push / Pull / Legs (PPL)            Int–Adv   3–6   Push, Pull, Legs (cycles)
+    9.  Torso / Limbs                       Int       4     Torso, Limbs, (Rest), Torso, Limbs, (Rest)
+    10. Classic Bodybuilding                Int       5     Chest, Back, Legs, Shoulders, Arms
+    11. Powerbuilding                       Int–Adv   4–6   HeavyPush/Pull/Legs, HyperPush/Pull/Legs
+    12. Athletic Performance                Int       4–5   LowerStr, UpperStr, Conditioning, Explosive, FullCircuit
+    13. Modified Bro Split                  Int–Adv   5–6   Chest, Back, Legs, Shoulders, Arms, WeakPoint
+    14. Hybrid PPL + Specialization         Int       5–6   Push, Pull, Legs, Chest+Shoulders, Back+Arms, Legs+Core
+    15. PPL x2                              Adv       6     PushH, PullH, LegsH, PushV, PullV, LegsV
+    16. Arnold Split                        Adv       6     Chest+Back, Shoulders+Arms, Legs (cycles)
+    17. Bro Split                           Adv       5–6   Chest, Back, Legs, Shoulders, Arms, WeakPoint
+    18. Body Part Priority                  Adv       5–6   Priority, Legs, Push, Pull, Shoulders, Arms+Core
+    19. PHAT                                Adv       5     UpperPower, LowerPower, (Rest), Back+ShoulderHyper, LowerHyper, Chest+ArmsHyper
+    20. Advanced Arnold + Power Hybrid       Adv       6     HeavyChest+Back, HeavyLegs, HeavyShoulders, Chest+BackVol, Arms+Shoulders, LegsVol
+    21. High Volume Specialization          Adv       5–6   Chest, Back, Legs, Shoulders, Arms, Priority
+    22. PPL + Specialization                Adv       6     Push, Pull, Legs, Push, Pull, WeakPoint
+    23. Functional Bodybuilding              Adv       4–6   Strength, Hypertrophy, Athletic, Conditioning, WeakPoint, Mobility
+    24. Competition Prep                     Adv       6     Chest, Back, Legs, Shoulders, Arms, Conditioning+Abs
+
+NOTE on "Rest" columns: message.txt shows Rest as an explicit column for a
+few splits (Push/Pull, Machine-Based, Torso/Limbs, PHAT). Rest-day placement
+across the actual 7-weekday calendar is handled separately and deterministically
+by fitness_generator._build_weekly_template() (spread evenly, independent of
+which split is chosen). So every `pattern`/`sequence` below intentionally
+contains ONLY the non-rest training-day tokens, in the table's left-to-right
+order — this is consistent with the app's existing design, not a deviation.
+
+SEQUENCE MODES
+    "cyclic": a short repeating unit (e.g. ["push", "pull", "legs"]) that is
+        tiled out to however many training days/week were requested — this is
+        correct for rows whose table cells literally repeat the same cycle as
+        the day count grows (PPL: 3→6 repeats push/pull/legs twice; Push/Pull:
+        2→4 repeats push/pull twice).
+    "fixed": the table gives a DIFFERENT, non-repeating token at each position
+        up to some maximum (e.g. PPL+Specialization's day 6 is "Weak Point",
+        not a 4th repeat of "Legs"). For these, `pattern` holds the full
+        maximum-length sequence exactly as it appears in the table, and a
+        request for fewer days/week takes the first N tokens (each split's own
+        days/week column in message.txt only ever *adds* a day at the end, so
+        trimming from the tail is safe); a request for more days than the
+        table defines cycles the full fixed pattern instead of inventing rows.
 
 Public API (unchanged so fitness_generator.py needs no changes)
 ──────────
@@ -37,7 +67,8 @@ Public API (unchanged so fitness_generator.py needs no changes)
 
     SPLIT_LIBRARY[split_key] -> {
             "display_name": "Push Pull Legs",
-            "pattern":      ["push", "pull", "legs"],   # repeating cycle
+            "mode":         "cyclic" | "fixed",
+            "pattern":      ["push", "pull", "legs"],
         }
 
 This module has ZERO dependency on the LLM prompt / schema code — it is pure
@@ -59,90 +90,154 @@ import re
 # WARMUP_LIBRARY in fitness_generator.py so day-type + warmup selection can
 # key off the same vocabulary.
 SPLIT_LIBRARY = {
-    # -- row 1 --------------------------------------------------------------
-    "ppl": {
-        "display_name": "Push Pull Legs",
-        "pattern": ["push", "pull", "legs"],
-    },
-    # -- row 2 (PPL cycled to a fixed 6 days — "PPL x2") ---------------------
-    "ppl_x2": {
-        "display_name": "PPL x2",
-        "pattern": ["push", "pull", "legs"],
-    },
-    # -- row 3 ----------------------------------------------------------------
-    "bro_split": {
-        "display_name": "Bro Split",
-        "pattern": ["push", "pull", "legs", "upper", "full"],
-    },
-    # -- row 4 ------------------------------------------------------------------
-    "arnold": {
-        "display_name": "Arnold Split",
-        "pattern": ["push", "pull", "legs", "upper", "lower"],
-    },
-    # -- row 5 --------------------------------------------------------------------
+    # -- row 1 (Push/Pull, Beg, 2–4) -----------------------------------------
     "push_pull": {
-        "display_name": "Push Pull",
+        "display_name": "Push / Pull",
+        "mode": "cyclic",
         "pattern": ["push", "pull"],
     },
-    # -- row 6 ----------------------------------------------------------------------
+    # -- row 2 (Push/Legs/Pull, Beg, 3) ---------------------------------------
     "push_legs_pull": {
         "display_name": "Push / Legs / Pull",
+        "mode": "cyclic",
         "pattern": ["push", "legs", "pull"],
     },
-    # -- row 7 ------------------------------------------------------------------------
+    # -- row 3 (Legs/Push/Pull, Beg, 3) -----------------------------------------
     "legs_push_pull": {
         "display_name": "Legs / Push / Pull",
+        "mode": "cyclic",
         "pattern": ["legs", "push", "pull"],
     },
-    # -- row 8 --------------------------------------------------------------------------
+    # -- row 4 (Beginner Bodybuilding, Beg, 4) -----------------------------------
     "beginner_bodybuilding": {
         "display_name": "Beginner Bodybuilding Split",
-        "pattern": ["upper", "lower", "push", "pull"],
+        "mode": "fixed",
+        "pattern": ["chest_triceps", "back_biceps", "legs", "shoulders_abs"],
     },
-    # -- row 9 ----------------------------------------------------------------------------
-    "foundation_strength": {
-        "display_name": "Foundation Strength Split",
-        "pattern": ["full", "full", "full"],
-    },
-    # -- row 10 -----------------------------------------------------------------------------
+    # -- row 5 (Machine-Based Split, Beg, 2–4) -----------------------------------
     "machine_based": {
         "display_name": "Machine-Based Split",
-        "pattern": ["full", "full"],
+        "mode": "fixed",
+        "pattern": ["upper_machines", "lower_machines", "full_body_machines", "cardio_core"],
     },
-    # -- row 11 -------------------------------------------------------------------------------
+    # -- row 6 (Compound Strength Split, Beg, 3–4) -----------------------------------
+    "compound_strength": {
+        "display_name": "Compound Strength Split",
+        "mode": "fixed",
+        "pattern": ["squat_focus", "bench_focus", "deadlift_focus", "overhead_press_accessories"],
+    },
+    # -- row 7 (Strength Foundation Split, Beg, 3–4) -----------------------------------
+    "foundation_strength": {
+        "display_name": "Strength Foundation Split",
+        "mode": "fixed",
+        "pattern": ["push", "pull", "legs", "full_accessory"],
+    },
+    # -- row 8 (PPL, Int–Adv, 3–6) -----------------------------------
+    "ppl": {
+        "display_name": "Push Pull Legs",
+        "mode": "cyclic",
+        "pattern": ["push", "pull", "legs"],
+    },
+    # -- row 9 (Torso/Limbs, Int, 4) -----------------------------------
     "torso_limbs": {
         "display_name": "Torso / Limbs",
-        "pattern": ["upper", "lower"],
+        "mode": "cyclic",
+        "pattern": ["torso", "limbs"],
     },
-    # -- row 12 ---------------------------------------------------------------------------------
-    "body_part_priority": {
-        "display_name": "Body Part Priority Split",
-        "pattern": ["push", "pull", "legs", "upper", "lower"],
+    # -- row 10 (Classic Bodybuilding, Int, 5) -----------------------------------
+    "classic_bodybuilding": {
+        "display_name": "Classic Bodybuilding Split",
+        "mode": "fixed",
+        "pattern": ["chest", "back", "legs", "shoulders", "arms"],
     },
-    # -- row 13 -----------------------------------------------------------------------------------
-    "phat": {
-        "display_name": "PHAT",
-        "pattern": ["lower", "upper", "full", "lower", "upper"],
-    },
-    # -- row 14 -------------------------------------------------------------------------------------
+    # -- row 11 (Powerbuilding, Int–Adv, 4–6) -----------------------------------
     "powerbuilding": {
         "display_name": "Powerbuilding Split",
-        "pattern": ["lower", "upper"],
+        "mode": "fixed",
+        "pattern": ["heavy_push", "heavy_pull", "heavy_legs",
+                    "hypertrophy_push", "hypertrophy_pull", "hypertrophy_legs"],
     },
-    # -- row 15 ---------------------------------------------------------------------------------------
-    "phul": {
-        "display_name": "PHUL (Power Hypertrophy Upper Lower)",
-        "pattern": ["upper", "lower", "upper", "lower"],
+    # -- row 12 (Athletic Performance, Int, 4–5) -----------------------------------
+    "athletic_performance": {
+        "display_name": "Athletic Performance Split",
+        "mode": "fixed",
+        "pattern": ["lower_strength", "upper_strength", "conditioning",
+                    "explosive_training", "full_athletic_circuit"],
     },
-    # -- row 16 -----------------------------------------------------------------------------------------
+    # -- row 13 (Modified Bro Split, Int–Adv, 5–6) -----------------------------------
     "modified_bro_split": {
         "display_name": "Modified Bro Split",
-        "pattern": ["push", "pull", "legs", "upper", "cardio"],
+        "mode": "fixed",
+        "pattern": ["chest", "back", "legs", "shoulders", "arms", "weak_point"],
     },
-    # -- row 17 -------------------------------------------------------------------------------------------
+    # -- row 14 (Hybrid PPL + Specialization, Int, 5–6) -----------------------------------
+    "hybrid_ppl_specialization": {
+        "display_name": "Hybrid PPL + Specialization",
+        "mode": "fixed",
+        "pattern": ["push", "pull", "legs", "chest_shoulders", "back_arms", "legs_core"],
+    },
+    # -- row 15 (PPL x2, Adv, 6) -----------------------------------
+    "ppl_x2": {
+        "display_name": "PPL x2",
+        "mode": "fixed",
+        "pattern": ["push_heavy", "pull_heavy", "legs_heavy",
+                    "push_volume", "pull_volume", "legs_volume"],
+    },
+    # -- row 16 (Arnold Split, Adv, 6) -----------------------------------
+    "arnold": {
+        "display_name": "Arnold Split",
+        "mode": "cyclic",
+        "pattern": ["chest_back", "shoulders_arms", "legs"],
+    },
+    # -- row 17 (Bro Split, Adv, 5–6) -----------------------------------
+    "bro_split": {
+        "display_name": "Bro Split",
+        "mode": "fixed",
+        "pattern": ["chest", "back", "legs", "shoulders", "arms", "weak_point"],
+    },
+    # -- row 18 (Body Part Priority, Adv, 5–6) -----------------------------------
+    "body_part_priority": {
+        "display_name": "Body Part Priority Split",
+        "mode": "fixed",
+        "pattern": ["priority_muscle", "legs", "push", "pull", "shoulders", "arms_core"],
+    },
+    # -- row 19 (PHAT, Adv, 5) -----------------------------------
+    "phat": {
+        "display_name": "PHAT (Power Hypertrophy Adaptive Training)",
+        "mode": "fixed",
+        "pattern": ["upper_power", "lower_power", "back_shoulders_hypertrophy",
+                    "lower_hypertrophy", "chest_arms_hypertrophy"],
+    },
+    # -- row 20 (Advanced Arnold + Power Hybrid, Adv, 6) -----------------------------------
     "advanced_arnold_power_hybrid": {
         "display_name": "Advanced Arnold + Power Hybrid",
-        "pattern": ["push", "pull", "legs", "upper", "lower", "full"],
+        "mode": "fixed",
+        "pattern": ["heavy_chest_back", "heavy_legs", "heavy_shoulders",
+                    "chest_back_volume", "arms_shoulders", "legs_volume"],
+    },
+    # -- row 21 (High Volume Specialization, Adv, 5–6) -----------------------------------
+    "high_volume_specialization": {
+        "display_name": "High Volume Specialization Split",
+        "mode": "fixed",
+        "pattern": ["chest", "back", "legs", "shoulders", "arms", "priority_muscle"],
+    },
+    # -- row 22 (PPL + Specialization, Adv, 6) -----------------------------------
+    "ppl_specialization": {
+        "display_name": "Push / Pull / Legs + Specialization",
+        "mode": "fixed",
+        "pattern": ["push", "pull", "legs", "push", "pull", "weak_point"],
+    },
+    # -- row 23 (Functional Bodybuilding, Adv, 4–6) -----------------------------------
+    "functional_bodybuilding": {
+        "display_name": "Functional Bodybuilding Split",
+        "mode": "fixed",
+        "pattern": ["strength", "hypertrophy", "athletic", "conditioning", "weak_point", "mobility"],
+    },
+    # -- row 24 (Competition Prep, Adv, 6) -----------------------------------
+    "competition_prep": {
+        "display_name": "Competition Prep Split",
+        "mode": "fixed",
+        "pattern": ["chest", "back", "legs", "shoulders", "arms", "conditioning_abs"],
     },
     # -- NOT in message.txt — used ONLY as the mechanical fallback for a
     # literal 1-day/week schedule, where no "split" is definitionally
@@ -150,17 +245,39 @@ SPLIT_LIBRARY = {
     # decision tree for every day-count that message.txt actually covers.
     "full_body": {
         "display_name": "Full Body",
+        "mode": "cyclic",
         "pattern": ["full"],
     },
 }
 
 
 def _cycle_split(key: str, days: int) -> dict:
-    """Cycle a split's pattern out to `days` entries and return the
-    standard split dict."""
+    """
+    Expand a split's pattern out to `days` entries and return the standard
+    split dict.
+
+    "cyclic" patterns (a short repeating unit) tile indefinitely — correct
+    for splits whose table row literally repeats as day-count grows (PPL,
+    Push/Pull, Arnold, Torso/Limbs, etc.).
+
+    "fixed" patterns hold the exact maximum-length sequence from message.txt.
+    A request for fewer days than the pattern's length takes the first N
+    tokens (trimming from the tail, since message.txt's own day-count ranges
+    only ever ADD a day at the end — e.g. Bro Split's 5-day version is just
+    its 6-day version minus the trailing Weak Point day). A request for MORE
+    days than the pattern defines has no basis in the table, so the full
+    fixed pattern is cycled instead of inventing new rows.
+    """
     lib = SPLIT_LIBRARY[key]
     pattern = lib["pattern"]
-    sequence = [pattern[i % len(pattern)] for i in range(days)]
+    mode = lib.get("mode", "cyclic")
+    if mode == "fixed":
+        if days <= len(pattern):
+            sequence = pattern[:days]
+        else:
+            sequence = [pattern[i % len(pattern)] for i in range(days)]
+    else:
+        sequence = [pattern[i % len(pattern)] for i in range(days)]
     return {
         "split_name": lib["display_name"],
         "sequence": sequence,
@@ -191,7 +308,7 @@ def _goal_flags(raw_goal: str) -> dict:
         "recovery": any(
             t in g for t in ("recovery", "recover", "deload", "injury", "rehab", "rehabilitation")
         ),
-        # Row 12 (Body Part Priority Split) is explicitly for "bringing up
+        # Row 18 (Body Part Priority Split) is explicitly for "bringing up
         # lagging muscle groups" — only route there on an explicit signal,
         # never as a generic advanced default.
         "priority": any(
@@ -265,17 +382,17 @@ def _decide(
     # -- RECOVERY GOAL -- hard override --------------------------------
     # message.txt has no dedicated "recovery/deload/rehab" row. In the
     # ABSENCE of a matching row, the lowest-fatigue option actually present
-    # in the table is used: Machine-Based Split (row 10 — "new gym members,
-    # confidence building, fat loss", i.e. the lowest-intensity entry) for
-    # low frequency, or Torso/Limbs (row 11) once frequency climbs, since
-    # both spread load thinner than the bodypart-isolation splits.
+    # in the table is used: Machine-Based Split (row 5 — beginner-friendly,
+    # lowest-intensity entry) for low frequency, or Torso/Limbs (row 9) once
+    # frequency climbs, since both spread load thinner than the bodypart-
+    # isolation splits.
     if goals["recovery"]:
         if days <= 4:
             return _cycle_split("machine_based", days)
         return _cycle_split("torso_limbs", days)
 
     # -- BEGINNER ---------------------------------------------------------
-    # message.txt Beginner rows only go up to 4 days/week (rows 5, 8, 9, 10).
+    # message.txt Beginner rows only go up to 4 days/week (rows 1-7).
     # There is no beginner cell for 5-6 days — per the table, a beginner
     # profile is capped at the 4-day decision, not extrapolated.
     if tier == "beginner":
@@ -288,42 +405,38 @@ def _decide(
         capped_days = min(days, 4)
 
         if capped_days == 2:
-            # Cell: rows 5 (Push/Pull) and 10 (Machine-Based) both cover 2.
+            # Cell: rows 1 (Push/Pull, 2-4) and 5 (Machine-Based, 2-4) cover 2.
             if goals["fat_loss"] or goals["confidence_building"]:
-                # Row 10: "New gym members, confidence building, fat loss"
-                return _cycle_split("machine_based", capped_days)
-            return _cycle_split("push_pull", capped_days)  # Row 5
+                return _cycle_split("machine_based", capped_days)       # Row 5
+            return _cycle_split("push_pull", capped_days)                # Row 1
 
         if capped_days == 3:
-            # Cell: rows 5, 6, 7, 9, 10 all cover 3 for Beginner.
-            # NOTE: fat_loss no longer routes to machine_based (fullbody) here.
-            # Fullbody-every-day is reserved for the <=2-days-available case
-            # (capped_days == 2, above). At 3+ days, fat-loss beginners get a
-            # real split with movement variety instead.
+            # Cell: rows 1, 2 (Push/Legs/Pull), 3 (Legs/Push/Pull), 5, 6
+            # (Compound Strength), 7 (Strength Foundation) all cover 3.
             if goals["confidence_building"]:
-                return _cycle_split("machine_based", capped_days)      # Row 10
+                return _cycle_split("machine_based", capped_days)        # Row 5
             if goals["fat_loss"]:
-                return _cycle_split("legs_push_pull", capped_days)      # Row 7
+                return _cycle_split("legs_push_pull", capped_days)        # Row 3
             if goals["strength"]:
-                return _cycle_split("foundation_strength", capped_days)  # Row 9
+                # Row 6 is pure barbell-compound strength work; Row 7 is a
+                # push/pull/legs split with strength-flavoured accessory —
+                # pick the dedicated compound-lift row for a plain strength goal.
+                return _cycle_split("compound_strength", capped_days)      # Row 6
             if goals["muscle_gain"] or goals["bodybuilding"]:
-                return _cycle_split("push_legs_pull", capped_days)      # Row 6
-            return _cycle_split("push_pull", capped_days)               # Row 5 default
+                return _cycle_split("push_legs_pull", capped_days)         # Row 2
+            return _cycle_split("push_pull", capped_days)                  # Row 1 default
 
         # capped_days == 4
-        # Cell: rows 5, 8, 9, 10 all cover 4 for Beginner.
-        # Same reasoning as capped_days==3: fat_loss should get a varied
-        # split at 4 days/week, not fullbody. Only confidence_building (not
-        # tied to a day-count) still gets the gentler machine_based split.
+        # Cell: rows 1, 4 (Beginner Bodybuilding), 5, 6, 7 all cover 4.
         if goals["confidence_building"]:
-            return _cycle_split("machine_based", capped_days)          # Row 10
+            return _cycle_split("machine_based", capped_days)             # Row 5
         if goals["fat_loss"]:
-            return _cycle_split("beginner_bodybuilding", capped_days)   # Row 8
+            return _cycle_split("beginner_bodybuilding", capped_days)      # Row 4
         if goals["strength"]:
-            return _cycle_split("foundation_strength", capped_days)     # Row 9
+            return _cycle_split("compound_strength", capped_days)          # Row 6
         if goals["muscle_gain"] or goals["bodybuilding"]:
-            return _cycle_split("beginner_bodybuilding", capped_days)   # Row 8
-        return _cycle_split("push_pull", capped_days)                   # Row 5 default
+            return _cycle_split("beginner_bodybuilding", capped_days)      # Row 4
+        return _cycle_split("push_pull", capped_days)                      # Row 1 default
 
     # -- INTERMEDIATE --------------------------------------------------------
     if tier == "intermediate":
@@ -331,51 +444,50 @@ def _decide(
             return _cycle_split("full_body", days)  # below table range
 
         if days == 2:
-            # Cell: only row 5 (Push/Pull, 2-4) covers 2 for Intermediate.
+            # No Intermediate cell covers 2 days in message.txt; fall back
+            # to the lowest-frequency row that spans down to 2 (Push/Pull is
+            # Beginner-only in the new table, so use Torso/Limbs shape at 2).
             return _cycle_split("push_pull", days)
 
         if days == 3:
-            # Cell: rows 1 (PPL, 3-6), 5, 6, 7 all cover 3 for Intermediate.
-            if goals["fat_loss"]:
-                return _cycle_split("legs_push_pull", days)   # Row 7
-            if goals["muscle_gain"] or goals["bodybuilding"]:
-                return _cycle_split("push_legs_pull", days) if minutes >= 60 else _cycle_split("push_pull", days)  # Row 6 / Row 5
-            return _cycle_split("ppl", days)                   # Row 1 default
+            # Cell: only row 8 (PPL, 3-6) covers 3 for Intermediate.
+            return _cycle_split("ppl", days)
 
         if days == 4:
-            # Cell: rows 1 (PPL, 3-6), 11 (Torso/Limbs, 4), 14 (Powerbuilding,
-            # 4-6), 15 (PHUL — Intermediate only, 4) all cover 4.
-            # Rows 11/15 are Upper/Lower-style splits — only pick them on an
-            # explicit signal (strength / an explicit upper-lower preference).
-            # Row 14 (Powerbuilding) is likewise upper/lower in structure but
-            # is the table's dedicated "strength and size" row, so a plain
-            # strength goal still routes there deliberately, not by default.
-            if goals["strength"] and goals["muscle_gain"]:
-                return _cycle_split("phul", days)          # Row 15: strength AND hypertrophy
+            # Cell: rows 8 (PPL, 3-6), 9 (Torso/Limbs, 4), 11 (Powerbuilding,
+            # 4-6) all cover 4. Row 9 is Upper/Lower-style — explicit-request
+            # only. Row 11 (Powerbuilding) is the table's dedicated
+            # strength-and-size row, so a plain strength goal routes there.
             if goals["strength"]:
-                return _cycle_split("powerbuilding", days)  # Row 14
+                return _cycle_split("powerbuilding", days)      # Row 11
             if goals["upper_lower_preference"]:
-                return _cycle_split("torso_limbs", days)     # Row 11 — explicit request only
-            return _cycle_split("ppl", days)                  # Row 1 default (non upper/lower)
+                return _cycle_split("torso_limbs", days)          # Row 9 — explicit request only
+            return _cycle_split("ppl", days)                       # Row 8 default
 
         if days == 5:
-            # Cell: rows 3 (Bro Split, 5-6) and 16 (Modified Bro Split, 5-6) cover 5 for Intermediate.
-            # (Rows 12/13 — Body Part Priority / PHAT — are Advanced-only.)
+            # Cell: rows 10 (Classic Bodybuilding, 5), 11 (Powerbuilding,
+            # 4-6), 12 (Athletic Performance, 4-5), 13 (Modified Bro
+            # Split, 5-6), 14 (Hybrid PPL + Specialization, 5-6) all cover 5.
             if goals["fat_loss"]:
-                return _cycle_split("modified_bro_split", days)  # Row 16 (built-in cardio day)
-            return _cycle_split("bro_split", days)                # Row 3 default
+                return _cycle_split("modified_bro_split", days)   # Row 13 (built-in weak-point/varied day)
+            if goals["strength"]:
+                return _cycle_split("powerbuilding", days)          # Row 11
+            if goals["confidence_building"]:
+                return _cycle_split("athletic_performance", days)   # Row 12
+            if goals["muscle_gain"] or goals["bodybuilding"]:
+                return _cycle_split("hybrid_ppl_specialization", days)  # Row 14
+            return _cycle_split("classic_bodybuilding", days)        # Row 10 default
 
         # days >= 6
-        # Cell: rows 1 (PPL, up to 6), 3 (Bro Split), 14 (Powerbuilding), 16
-        # (Modified Bro Split) all cover 6 for Intermediate.
-        # (Rows 2/4/12/17 — PPL x2 / Arnold / Priority / Adv-Arnold-Hybrid — are Advanced-only.)
+        # Cell: rows 8 (PPL, up to 6), 11 (Powerbuilding), 13 (Modified Bro
+        # Split), 14 (Hybrid PPL + Specialization) all cover 6.
         if goals["strength"]:
-            return _cycle_split("powerbuilding", 6)         # Row 14
+            return _cycle_split("powerbuilding", 6)                # Row 11
         if goals["fat_loss"]:
-            return _cycle_split("modified_bro_split", 6)     # Row 16
+            return _cycle_split("modified_bro_split", 6)             # Row 13
         if goals["muscle_gain"] or goals["bodybuilding"]:
-            return _cycle_split("bro_split", 6)               # Row 3
-        return _cycle_split("ppl", 6)                          # Row 1 default
+            return _cycle_split("hybrid_ppl_specialization", 6)       # Row 14
+        return _cycle_split("ppl", 6)                                  # Row 8 default
 
     # -- ADVANCED --------------------------------------------------------------
     if tier == "advanced":
@@ -383,49 +495,58 @@ def _decide(
             return _cycle_split("full_body", days)  # below table range
 
         if days == 3:
-            # Cell: only row 1 (PPL, 3-6) covers 3 for Advanced.
+            # No Advanced cell covers exactly 3 in message.txt (advanced rows
+            # start at 4-5); fall back to PPL, the closest lower-frequency
+            # base pattern shared with Intermediate.
             return _cycle_split("ppl", days)
 
         if days == 4:
-            # Cell: rows 1 (PPL, 3-6), 11 (Torso/Limbs, 4), 14 (Powerbuilding,
-            # 4-6) cover 4. Row 11 is Upper/Lower-style — explicit-request only.
+            # Cell: rows 11 (Powerbuilding, 4-6) and 23 (Functional
+            # Bodybuilding, 4-6) cover 4 for Advanced.
             if goals["strength"]:
-                return _cycle_split("powerbuilding", days)      # Row 14
-            if goals["upper_lower_preference"]:
-                return _cycle_split("torso_limbs", days)         # Row 11 — explicit request only
-            return _cycle_split("ppl", days)                      # Row 1 default (non upper/lower)
+                return _cycle_split("powerbuilding", days)          # Row 11
+            return _cycle_split("functional_bodybuilding", days)      # Row 23 default
 
         if days == 5:
-            # Cell: rows 3 (Bro Split), 12 (Body Part Priority), 13 (PHAT),
-            # 14 (Powerbuilding), 16 (Modified Bro Split) all cover 5.
-            if goals["fat_loss"]:
-                return _cycle_split("modified_bro_split", days)  # Row 16
+            # Cell: rows 11 (Powerbuilding), 17 (Bro Split), 18 (Body Part
+            # Priority), 19 (PHAT), 21 (High Volume Specialization), 23
+            # (Functional Bodybuilding) all cover 5.
             if goals["priority"]:
-                return _cycle_split("body_part_priority", days)   # Row 12 — explicit lagging-muscle signal
-            if goals["strength"] and not goals["muscle_gain"]:
-                return _cycle_split("powerbuilding", days)         # Row 14
+                return _cycle_split("body_part_priority", days)      # Row 18 — explicit lagging-muscle signal
             if goals["strength"] and goals["muscle_gain"]:
-                # Row 13 (PHAT) is the table's dedicated strength+hypertrophy
-                # hybrid row, so this specific combo still routes there
-                # deliberately — but it's no longer the generic fallback.
+                # Row 19 (PHAT) is the table's dedicated strength+hypertrophy
+                # hybrid row, so this specific combo routes there deliberately.
                 return _cycle_split("phat", days)
-            return _cycle_split("bro_split", days)                   # Row 3 default (non upper/lower)
+            if goals["strength"]:
+                return _cycle_split("powerbuilding", days)            # Row 11
+            if goals["muscle_gain"] or goals["bodybuilding"]:
+                return _cycle_split("high_volume_specialization", days)  # Row 21
+            if goals["confidence_building"]:
+                return _cycle_split("functional_bodybuilding", days)   # Row 23
+            return _cycle_split("bro_split", days)                       # Row 17 default
 
         # days >= 6
-        # Cell: rows 1 (PPL), 2 (PPL x2), 3 (Bro Split), 4 (Arnold), 12
-        # (Body Part Priority), 14 (Powerbuilding), 16 (Modified Bro Split),
-        # 17 (Advanced Arnold + Power Hybrid) all cover 6 for Advanced.
-        if goals["fat_loss"]:
-            return _cycle_split("modified_bro_split", 6)             # Row 16
+        # Cell: rows 11 (Powerbuilding), 15 (PPL x2), 16 (Arnold), 17 (Bro
+        # Split), 18 (Body Part Priority), 20 (Adv Arnold + Power Hybrid),
+        # 21 (High Volume Specialization), 22 (PPL + Specialization), 23
+        # (Functional Bodybuilding), 24 (Competition Prep) all cover 6.
         if goals["priority"]:
-            return _cycle_split("body_part_priority", 6)              # Row 12
+            return _cycle_split("body_part_priority", 6)               # Row 18
         if goals["strength"] and goals["bodybuilding"]:
-            return _cycle_split("advanced_arnold_power_hybrid", 6)     # Row 17
-        if goals["strength"] and not goals["muscle_gain"]:
-            return _cycle_split("powerbuilding", 6)                     # Row 14
-        if goals["bodybuilding"] or goals["muscle_gain"]:
-            return _cycle_split("arnold", 6)                            # Row 4
-        return _cycle_split("ppl_x2", 6)                                 # Row 2 default
+            return _cycle_split("advanced_arnold_power_hybrid", 6)       # Row 20
+        if goals["strength"]:
+            return _cycle_split("powerbuilding", 6)                      # Row 11
+        if goals["bodybuilding"] and goals["muscle_gain"]:
+            # Both signals firing together -> the table's dedicated
+            # "aesthetics + advanced bodybuilding" row.
+            return _cycle_split("arnold", 6)                             # Row 16
+        if goals["muscle_gain"]:
+            return _cycle_split("ppl_specialization", 6)                  # Row 22
+        if goals["fat_loss"]:
+            return _cycle_split("competition_prep", 6)                    # Row 24 (built-in conditioning day)
+        if goals["confidence_building"]:
+            return _cycle_split("functional_bodybuilding", 6)              # Row 23
+        return _cycle_split("ppl_x2", 6)                                   # Row 15 default
 
     # Should never hit -- safety net (below/outside table range)
     return _cycle_split("full_body", max(days, 1))

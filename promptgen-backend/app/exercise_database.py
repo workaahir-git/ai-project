@@ -305,6 +305,14 @@ def _experience_rank(experience_raw: str) -> int:
 # first, so what gets cut is "extra" isolation work, never the main lift.
 BEGINNER_CAP_LEG_DAY = 6
 BEGINNER_CAP_OTHER_DAY = 5
+# Combined "upper" day (back+chest+shoulders+biceps+triceps) uses fixed,
+# tier-independent isolation floors set in fitness_generator._compute_day_plan
+# (back 3, chest 3, shoulders 2, biceps 2, triceps 2 = 12 isolation slots,
+# plus 3 mandatory compounds = 15 total). Without its own cap here, the
+# beginner trim step below would fall back to BEGINNER_CAP_OTHER_DAY (5) and
+# chop those floors straight back down — re-losing biceps/triceps from the
+# opposite direction of the original bug.
+BEGINNER_CAP_UPPER_DAY = 15
 
 
 def select_day_exercises(
@@ -358,10 +366,22 @@ def select_day_exercises(
     big_muscles = {"legs", "back", "chest", "shoulders"}
     ordered_muscles = _order_by_priority(plan["muscles"])
 
-    # 1) mandatory compounds — one per big muscle trained, never trimmed
+    # Some day types (beginner Push/Pull/Legs, per hard client rule) specify
+    # EXACTLY which muscle(s) get a compound lift via plan["compound_muscles"]
+    # rather than "every big muscle trained that day gets one" — e.g. beginner
+    # Push trains chest+shoulders+triceps but ONLY chest gets a compound, so
+    # shoulders stays at its single fixed isolation exercise. Respect that
+    # override when present; otherwise fall back to the original behavior.
+    compound_muscles_override = plan.get("compound_muscles")
+    if compound_muscles_override is not None:
+        compound_muscle_set = set(compound_muscles_override)
+    else:
+        compound_muscle_set = big_muscles
+
+    # 1) mandatory compounds — one per designated muscle, never trimmed
     compounds = []
     for m in ordered_muscles:
-        if m not in big_muscles:
+        if m not in compound_muscle_set:
             continue
         pool = EXERCISE_DB.get(m, {}).get("compound", [])
         if not pool:
@@ -412,14 +432,26 @@ def select_day_exercises(
                 "cue": choice["cue"],
             })
 
-    # 3) apply the beginner cap, if any — trim isolation only, from the tail
-    if experience_rank == 0:
+    # 3) apply the beginner cap, if any — trim isolation only, from the tail.
+    # Day types that came from an explicit fixed distribution (plan["no_trim"]
+    # — currently beginner Push/Pull/Legs, see fitness_generator.BEGINNER_
+    # FIXED_DAY_PLANS) are exact by design and must never be trimmed further.
+    if experience_rank == 0 and not plan.get("no_trim"):
         is_leg_day = "legs" in plan["muscles"]
-        cap = BEGINNER_CAP_LEG_DAY if is_leg_day else BEGINNER_CAP_OTHER_DAY
+        is_upper_day = set(plan["muscles"]) == {
+            "back", "chest", "shoulders", "biceps", "triceps",
+        }
+        if is_leg_day:
+            cap = BEGINNER_CAP_LEG_DAY
+        elif is_upper_day:
+            cap = BEGINNER_CAP_UPPER_DAY
+        else:
+            cap = BEGINNER_CAP_OTHER_DAY
         remaining_isolation_slots = max(cap - len(compounds), 0)
         isolation_final = isolation_wishlist[:remaining_isolation_slots]
     else:
-        # intermediate/advanced: no cap, full formula-driven count from plan
+        # intermediate/advanced, or an exact fixed-distribution beginner day:
+        # no cap, full formula-driven (or fixed) count from plan
         isolation_final = isolation_wishlist
 
     return compounds + isolation_final, used_fallback

@@ -187,6 +187,85 @@ TOKEN_MUSCLE_MAP = {
     "full":  ["legs", "back", "chest", "shoulders"],
     "cardio": [],
     "rest":  [],
+
+    # ── New day-type tokens introduced by the expanded 24-row split table
+    # (split_engine.py SPLIT_LIBRARY). Each maps to the muscle groups that
+    # day actually trains; _compute_day_plan() below works generically off
+    # this list (fixed floors for 4+ muscles trained, round-robin + arm-floor
+    # for 1-3), so no further special-casing is needed per token.
+    "chest_triceps":   ["chest", "triceps"],
+    "back_biceps":     ["back", "biceps"],
+    "shoulders_abs":   ["shoulders", "core"],
+    "upper_machines":  ["back", "chest", "shoulders", "biceps", "triceps"],   # alias of "upper"
+    "lower_machines":  ["legs", "calves"],                                    # alias of "legs"
+    "full_body_machines": ["legs", "back", "chest", "shoulders"],             # alias of "full"
+    "cardio_core":     ["core"],
+    "squat_focus":       ["legs"],
+    "bench_focus":       ["chest"],
+    "deadlift_focus":    ["back"],
+    "overhead_press_accessories": ["shoulders"],
+    "full_accessory":  ["legs", "back", "chest", "shoulders"],                # alias of "full"
+    "torso":           ["chest", "back", "shoulders"],
+    "limbs":           ["legs", "biceps", "triceps"],
+    "chest":           ["chest"],
+    "back":            ["back"],
+    "shoulders":       ["shoulders"],
+    "arms":            ["biceps", "triceps"],
+    "heavy_push":        ["chest", "shoulders", "triceps"],                   # alias of "push"
+    "heavy_pull":        ["back", "biceps"],                                  # alias of "pull"
+    "heavy_legs":        ["legs", "calves"],                                  # alias of "legs"
+    "hypertrophy_push":  ["chest", "shoulders", "triceps"],
+    "hypertrophy_pull":  ["back", "biceps"],
+    "hypertrophy_legs":  ["legs", "calves"],
+    "lower_strength":    ["legs", "calves"],
+    "upper_strength":    ["back", "chest", "shoulders", "biceps", "triceps"],
+    "conditioning":      [],   # cardio-style, no weight-room exercises
+    "explosive_training": [],  # plyometric/athletic, no weight-room exercises
+    "full_athletic_circuit": ["legs", "back", "chest", "shoulders"],
+    # "Weak Point" / "Priority Muscle" are, per message.txt, whichever muscle
+    # group the individual client is lagging in — that's a per-client fact,
+    # not something derivable from the split table alone. Defaulting to
+    # biceps/triceps (the most commonly-lagging group) is a reasonable
+    # placeholder; pass profile["weak_point_muscle"] (see _resolve_weak_point
+    # below) to target a specific muscle instead.
+    "weak_point":        ["biceps", "triceps"],
+    "priority_muscle":   ["biceps", "triceps"],
+    "chest_shoulders":   ["chest", "shoulders"],
+    "back_arms":         ["back", "biceps", "triceps"],
+    "legs_core":         ["legs", "calves", "core"],
+    "push_heavy":        ["chest", "shoulders", "triceps"],
+    "pull_heavy":        ["back", "biceps"],
+    "legs_heavy":        ["legs", "calves"],
+    "push_volume":       ["chest", "shoulders", "triceps"],
+    "pull_volume":       ["back", "biceps"],
+    "legs_volume":       ["legs", "calves"],
+    "chest_back":        ["chest", "back"],
+    "shoulders_arms":    ["shoulders", "biceps", "triceps"],
+    "arms_core":         ["biceps", "triceps", "core"],
+    "upper_power":       ["back", "chest", "shoulders", "biceps", "triceps"],
+    "lower_power":       ["legs", "calves"],
+    "back_shoulders_hypertrophy": ["back", "shoulders"],
+    "lower_hypertrophy": ["legs", "calves"],
+    "chest_arms_hypertrophy": ["chest", "biceps", "triceps"],
+    "heavy_chest_back":  ["chest", "back"],
+    "heavy_shoulders":   ["shoulders"],
+    "chest_back_volume": ["chest", "back"],
+    "arms_shoulders":    ["biceps", "triceps", "shoulders"],
+    # "Strength" / "Hypertrophy" / "Athletic" (Functional Bodybuilding, row 23)
+    # are deliberately generic full-body-style days per message.txt / the
+    # template txt — mapped to the same 4 big muscles as "full".
+    "strength":          ["legs", "back", "chest", "shoulders"],
+    "hypertrophy":       ["legs", "back", "chest", "shoulders"],
+    "athletic":          [],   # conditioning/plyo-style, no weight-room exercises
+    "mobility":          [],   # stretching/mobility work, no weight-room exercises
+    "conditioning_abs":  ["core"],
+}
+
+# Tokens with no muscles (cardio, conditioning, athletic, mobility, rest) get
+# treated like "cardio" for warmup/day-building purposes — see
+# build_deterministic_workout_days() and _render_day_plan_table() below.
+NO_LIFTING_TOKENS = {
+    "cardio", "conditioning", "explosive_training", "athletic", "mobility", "rest",
 }
 
 # Muscle size classification. "Big" muscles (rank <= 4 conceptually) each get
@@ -205,6 +284,34 @@ _COMPOUND_HINT = {
 }
 
 ARM_ISOLATION_FLOOR = 2  # hard minimum isolation exercises per arm muscle trained
+
+# ── HARD-RULE BEGINNER PUSH / PULL / LEGS DISTRIBUTION ───────────────────────
+# Per explicit client requirement: beginner Push/Pull/Legs days do NOT use the
+# generic round-robin isolation split — they use this exact, fixed breakdown:
+#   Push: 3 chest total (1 compound + 2 isolation), 2 triceps, 1 shoulder
+#   Pull: 3 back total (1 compound + 2 isolation), 2 biceps, 0 traps
+#   Legs: 6 total leg exercises (1 compound + 4 isolation legs + 1 calf)
+# Only the compound muscle(s) listed get a compound lift; every other muscle
+# on the day is isolation-only (this is what keeps beginner Push at exactly
+# 1 shoulder exercise instead of a second compound + isolation).
+BEGINNER_FIXED_DAY_PLANS = {
+    "push": {
+        "muscles": ["chest", "triceps", "shoulders"],
+        "compound_muscles": ["chest"],
+        "isolation_by_muscle": {"chest": 2, "triceps": 2, "shoulders": 1},
+    },
+    "pull": {
+        "muscles": ["back", "biceps"],
+        "compound_muscles": ["back"],
+        "isolation_by_muscle": {"back": 2, "biceps": 2},
+    },
+    "legs": {
+        "muscles": ["legs", "calves"],
+        "compound_muscles": ["legs"],
+        "isolation_by_muscle": {"legs": 4, "calves": 1},
+    },
+}
+BEGINNER_FIXED_DAY_PLANS["lower"] = BEGINNER_FIXED_DAY_PLANS["legs"]  # "lower" is legs day under some splits
 
 
 def _parse_low_int(val, default: int) -> int:
@@ -255,10 +362,28 @@ def _compute_day_plan(token: str, vol: dict, exp_key: str = "intermediate") -> d
         tier-independent isolation floors (back 3, chest 3, shoulders 2,
         biceps 2, triceps 2) so no muscle group can silently vanish.
     """
+    # ── Beginner Push/Pull/Legs (and "lower" alias) use a fixed, explicit
+    # distribution per client hard-rule (see BEGINNER_FIXED_DAY_PLANS above)
+    # instead of any of the generic logic below — no round-robin, no
+    # compound-per-big-muscle default (that would otherwise also give
+    # shoulders its own compound on push day, which is not wanted here).
+    if exp_key == "beginner" and token in BEGINNER_FIXED_DAY_PLANS:
+        fixed = BEGINNER_FIXED_DAY_PLANS[token]
+        isolation_by_muscle = dict(fixed["isolation_by_muscle"])
+        total = len(fixed["compound_muscles"]) + sum(isolation_by_muscle.values())
+        return {
+            "muscles": list(fixed["muscles"]),
+            "compound_count": len(fixed["compound_muscles"]),
+            "compound_muscles": list(fixed["compound_muscles"]),
+            "isolation_by_muscle": isolation_by_muscle,
+            "total_exercises": total,
+            "no_trim": True,  # exact by design — beginner cap trimming must not touch this
+        }
+
     muscles = list(TOKEN_MUSCLE_MAP.get(token, []))
     if token == "pull" and exp_key in ("intermediate", "advanced"):
         muscles.append("traps")
-    if not muscles:  # cardio / rest / unknown
+    if not muscles:  # cardio / conditioning / athletic / mobility / rest / unknown
         return {
             "muscles": [], "compound_count": 0,
             "isolation_by_muscle": {}, "total_exercises": 0,
@@ -273,23 +398,19 @@ def _compute_day_plan(token: str, vol: dict, exp_key: str = "intermediate") -> d
 
     isolation_by_muscle = {m: 0 for m in muscles}
 
-    if token == "upper":
-        # Combined 5-muscle day (back+chest+shoulders+biceps+triceps). A
-        # tier-based isolation budget distributed round-robin in priority
-        # order (back > chest > triceps > shoulders > biceps) runs out
-        # before it ever reaches the tail of that order, and the "borrow
-        # from a lower-priority muscle" rescue has nothing left to borrow
-        # from once it's biceps' turn (nothing is ranked below it) — so an
-        # entire muscle group can vanish from the day. Fixed, tier-
-        # independent floors for this specific day type replace the
-        # round-robin/borrow logic entirely so every muscle always shows up.
-        isolation_by_muscle.update({
-            "back": 3,
-            "chest": 3,
-            "shoulders": 2,
-            "biceps": 2,
-            "triceps": 2,
-        })
+    if len(muscles) >= 4:
+        # Combined multi-muscle day (4+ groups at once — "upper", "torso",
+        # "full_athletic_circuit", "upper_power", etc). A tier-based isolation
+        # budget distributed round-robin in priority order runs out before it
+        # ever reaches the tail of that order, and the "borrow from a lower-
+        # priority muscle" rescue has nothing left to borrow from once it
+        # reaches the last muscle — so an entire muscle group can vanish from
+        # the day. Fixed, tier-independent floors replace the round-robin/
+        # borrow logic entirely so every trained muscle always shows up:
+        # big muscles (legs/back/chest/shoulders) get a floor of 3, everything
+        # else (arms/traps/calves/core) gets a floor of 2.
+        for m in muscles:
+            isolation_by_muscle[m] = 3 if m in _BIG_MUSCLES else 2
     else:
         # base isolation budget from the tier (strip ranges like "4–6" → take low end)
         iso_base = _parse_low_int(vol["isolation_count"], default=4)
@@ -357,19 +478,26 @@ def _render_day_plan_table(sequence: list, vol: dict, exp_key: str = "intermedia
         if token == "rest":
             lines.append(f"  DAY {idx} (REST): REST — no exercises, omit warmup_exercises.")
             continue
-        if token == "cardio":
+        if token in NO_LIFTING_TOKENS:
             lines.append(
-                f"  DAY {idx} (CARDIO): 1 steady-state or interval cardio block "
-                f"+ optional core. Include warmup_exercises."
+                f"  DAY {idx} ({token.upper()}): 1 steady-state or interval cardio/conditioning "
+                f"block + optional core. Include warmup_exercises."
             )
             continue
 
         plan = _compute_day_plan(token, vol, exp_key)
         parts = []
-        # compounds first (largest big group's compound first)
+        # compounds first (largest big group's compound first). Some day
+        # types (e.g. beginner push/pull/legs) specify EXACTLY which
+        # muscle(s) get a compound via plan["compound_muscles"] rather than
+        # "every big muscle trained gets one" — respect that when present.
+        compound_muscles = plan.get("compound_muscles")
+        if compound_muscles is None:
+            compound_muscles = [m for m in plan["muscles"] if m in _BIG_MUSCLES]
         for m in plan["muscles"]:
-            if m in _BIG_MUSCLES:
-                parts.append(f"1× COMPOUND for {m.upper()} [{_COMPOUND_HINT[m]}]")
+            if m in compound_muscles:
+                hint = _COMPOUND_HINT.get(m, f"a squat/press/row/pull pattern for {m}")
+                parts.append(f"1× COMPOUND for {m.upper()} [{hint}]")
         # isolation next, largest → smallest
         for m in plan["muscles"]:
             n = plan["isolation_by_muscle"].get(m, 0)
@@ -431,12 +559,12 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
             days.append({"is_rest": True})
             continue
 
-        if token == "cardio":
+        if token in NO_LIFTING_TOKENS:
             days.append({
                 "is_rest": False,
-                "warmup_exercises": WARMUP_LIBRARY.get("cardio", []),
+                "warmup_exercises": WARMUP_LIBRARY.get(token, WARMUP_LIBRARY.get("cardio", [])),
                 "exercises": [],
-                "safety": _SAFETY_DEFAULT_BY_TOKEN.get("cardio", ""),
+                "safety": _SAFETY_DEFAULT_BY_TOKEN.get(token, _SAFETY_DEFAULT_BY_TOKEN.get("cardio", "")),
             })
             continue
 
@@ -458,7 +586,7 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
 
         days.append({
             "is_rest": False,
-            "warmup_exercises": WARMUP_LIBRARY.get(token, []),
+            "warmup_exercises": WARMUP_LIBRARY.get(token, WARMUP_LIBRARY.get(_nearest_warmup_category(token), [])),
             "exercises": exercises,
             "safety": _SAFETY_DEFAULT_BY_TOKEN.get(token, "Controlled tempo, full range of motion on every rep."),
         })
@@ -584,6 +712,40 @@ TOKEN_MUSCLE_LABEL = {
 }
 
 
+def _nearest_warmup_category(token: str) -> str:
+    """
+    Many new day-type tokens (chest_triceps, torso, heavy_push, etc.) don't
+    have their own bespoke WARMUP_LIBRARY entry — rather than silently
+    falling back to an empty warmup list, pick the closest existing category
+    (push/pull/legs/upper/lower/full/cardio) based on which muscles that
+    token actually trains, so every lifting day still gets a sensible warmup.
+    """
+    if token in WARMUP_LIBRARY:
+        return token
+    muscles = set(TOKEN_MUSCLE_MAP.get(token, []))
+    if not muscles:
+        return "cardio"
+    if "legs" in muscles or "calves" in muscles:
+        if len(muscles) <= 2:
+            return "legs"
+        return "full"
+    if {"chest", "shoulders", "triceps"} & muscles and not ({"back", "biceps"} & muscles):
+        return "push"
+    if {"back", "biceps"} & muscles and not ({"chest", "shoulders", "triceps"} & muscles):
+        return "pull"
+    if len(muscles) >= 4:
+        return "upper"
+    return "full"
+
+
+def _prettify_token(token: str) -> str:
+    """'chest_triceps' -> 'Chest + Triceps'; 'ppl_x2'-style single words just
+    Title-Case normally. Used as the fallback for any new day-type token that
+    doesn't have a bespoke TOKEN_TITLE/TOKEN_MUSCLE_LABEL entry."""
+    words = token.split("_")
+    return " + ".join(w.capitalize() for w in words)
+
+
 def _build_weekly_template(sequence: list, training_days_per_week: int) -> list:
     """
     Deterministically decide which of the 7 weekdays are training vs rest,
@@ -643,13 +805,13 @@ def apply_deterministic_day_labels(data: dict, template: list) -> dict:
             day.pop("exercises", None)
             day.pop("warmup_exercises", None)
         else:
-            day["name"] = f"{WEEKDAY_NAMES[i]}: {TOKEN_TITLE.get(token, token.title())}"
-            day["type"] = TOKEN_MUSCLE_LABEL.get(token, token.title())
+            day["name"] = f"{WEEKDAY_NAMES[i]}: {TOKEN_TITLE.get(token, _prettify_token(token))}"
+            day["type"] = TOKEN_MUSCLE_LABEL.get(token, _prettify_token(token))
         fixed_days.append(day)
 
         fixed_schedule.append({
             "short": WEEKDAY_SHORT_TITLE[i],
-            "label": "Rest" if is_rest else TOKEN_TITLE.get(token, token.title()).replace(" Day", ""),
+            "label": "Rest" if is_rest else TOKEN_TITLE.get(token, _prettify_token(token)).replace(" Day", ""),
             "is_rest": is_rest,
             "bar_width": 15 if is_rest else 88,
         })
