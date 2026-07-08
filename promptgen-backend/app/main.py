@@ -9,7 +9,7 @@ from app.auth import get_current_user
 from app.membership import get_or_join_member
 from app.db import supabase
 from app.ollama_client import generate_with_ollama
-from app.schemas import GenerateRequest, GenerateResponse
+from app.schemas import GenerateRequest, GenerateResponse, FeedbackSubmission
 from app.fitness_generator import (
     SYSTEM_PROMPT,
     build_user_prompt,
@@ -126,6 +126,36 @@ def reset_plan(
     )
     cleared = len(res.data) if res.data else 0
     return {"cleared": cleared, "member_id": member["id"]}
+
+
+@app.post("/api/submit-feedback")
+def submit_feedback(
+    body: FeedbackSubmission,
+    user: dict = Depends(get_current_user),
+    member: dict = Depends(get_or_join_member),
+):
+    """Stores the weight-per-set and difficulty-star ratings the member
+    entered at the end of their training week. Each row is one set of one
+    exercise on one day. This is the raw signal a future generation pass
+    can read to auto-progress load / adjust volume for the NEXT plan —
+    that read side isn't wired up yet (see fitness_generator.py), this
+    endpoint just captures and persists the data reliably first.
+    """
+    rows = [
+        {
+            "member_id": member["id"],
+            "day_index": e.day_index,
+            "day_name": e.day_name,
+            "exercise": e.exercise,
+            "set_number": e.set_number,
+            "weight_kg": e.weight_kg,
+            "difficulty_rating": e.difficulty,
+        }
+        for e in body.entries
+    ]
+    if rows:
+        supabase.table("plan_feedback").insert(rows).execute()
+    return {"saved": len(rows)}
 
 
 @app.get("/api/my-plan")

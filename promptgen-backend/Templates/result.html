@@ -155,8 +155,38 @@ html,body{background:
 .set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
 .set-cell{background:var(--bg3);border:1px solid var(--border-hi);border-radius:10px;padding:9px 11px}
 .set-cell-label{font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
-.set-reps{font-size:12px;font-weight:600;color:#ddd;margin-bottom:4px}
-.set-stars{color:var(--lime);font-size:12px;letter-spacing:1px}
+.set-reps{font-size:12px;font-weight:600;color:#ddd;margin-bottom:6px}
+.set-weight{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.set-weight input{
+  width:56px;background:var(--bg4);border:1px solid var(--border-hi);border-radius:6px;
+  color:#fff;font-size:12px;font-weight:600;padding:4px 6px;text-align:center;
+  font-family:inherit;-moz-appearance:textfield;
+}
+.set-weight input::-webkit-outer-spin-button,.set-weight input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.set-weight input:focus{outline:none;border-color:var(--lime)}
+.set-weight span{font-size:10px;color:var(--muted);font-weight:600}
+.set-stars{font-size:15px;letter-spacing:2px;user-select:none;display:flex;gap:1px}
+.set-stars .star{color:var(--dim);cursor:pointer;transition:color .1s,transform .1s}
+.set-stars .star.filled{color:var(--lime)}
+.set-stars .star:hover{transform:scale(1.15)}
+.set-cell-hint{font-size:9px;color:var(--dim);margin-top:5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+
+.feedback-bar{
+  position:sticky;bottom:0;margin-top:18px;background:var(--bg2);border:1px solid var(--border-hi);
+  border-radius:16px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;
+  gap:14px;flex-wrap:wrap;
+}
+.feedback-copy{font-size:12.5px;color:var(--muted);line-height:1.5;max-width:520px}
+.feedback-copy strong{color:#ddd}
+.feedback-submit{
+  background:linear-gradient(100deg,#7c3aed,#3b82f6);color:#fff;border:none;border-radius:12px;
+  padding:12px 22px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;
+  transition:opacity .15s;
+}
+.feedback-submit:disabled{opacity:.6;cursor:default}
+.feedback-status{font-size:12px;font-weight:600;flex-shrink:0}
+.feedback-status.ok{color:#4ade80}
+.feedback-status.err{color:#f87171}
 
 .safety-note{margin-top:12px;background:var(--bg3);border-left:2px solid var(--lime);border-radius:0 8px 8px 0;padding:9px 13px;font-size:11.5px;color:var(--muted);line-height:1.55}
 .safety-note strong{color:#aaa;font-weight:600}
@@ -389,8 +419,9 @@ html,body{background:
             </div>
           </div>
           {% else %}
-          <div class="day-card" data-day-index="{{ loop.index0 }}" onclick="toggleDay(this)">
-            <div class="day-header">
+          {% set day_idx = loop.index0 %}
+          <div class="day-card" data-day-index="{{ day_idx }}">
+            <div class="day-header" onclick="toggleDay(this.closest('.day-card'))">
               <div class="day-dot">{{ day.short }}</div>
               <div class="day-meta">
                 <div class="day-name">{{ day.name }}</div>
@@ -411,10 +442,21 @@ html,body{background:
                 </div>
                 <div class="set-grid">
                   {% for i in range(ex.sets) %}
-                  <div class="set-cell">
+                  <div class="set-cell"
+                       data-day-index="{{ day_idx }}"
+                       data-day-name="{{ day.name }}"
+                       data-exercise="{{ ex.name }}"
+                       data-set-number="{{ i + 1 }}">
                     <div class="set-cell-label">Set {{ i + 1 }}</div>
                     <div class="set-reps">{{ ex.reps }}</div>
-                    <div class="set-stars">{% for s in range(5) %}{% if s < (ex.difficulty_stars | default(4)) %}★{% else %}☆{% endif %}{% endfor %}</div>
+                    <div class="set-weight">
+                      <input type="number" inputmode="decimal" step="0.5" min="0" class="weight-input" placeholder="0" onclick="event.stopPropagation()">
+                      <span>kg used</span>
+                    </div>
+                    <div class="set-stars" data-rating="0" onclick="event.stopPropagation()">
+                      {% for s in range(5) %}<span class="star" data-value="{{ s + 1 }}">★</span>{% endfor %}
+                    </div>
+                    <div class="set-cell-hint">Rate difficulty</div>
                   </div>
                   {% endfor %}
                 </div>
@@ -425,6 +467,14 @@ html,body{background:
           </div>
           {% endif %}
           {% endfor %}
+        </div>
+
+        <div class="feedback-bar">
+          <div class="feedback-copy">
+            <strong>Done with this week?</strong> Fill in the weight you actually used and rate how hard each set felt, then submit — your next plan gets tuned off this instead of starting from scratch.
+          </div>
+          <span class="feedback-status" id="feedbackStatus"></span>
+          <button class="feedback-submit" id="submitFeedbackBtn">Submit Weekly Feedback</button>
         </div>
       </div>
 
@@ -578,6 +628,89 @@ function toggleDay(card) {
   document.querySelectorAll('.day-card.open').forEach(c => c.classList.remove('open'));
   if (!isOpen) card.classList.add('open');
 }
+
+// ── Interactive difficulty stars (per set) ──
+document.querySelectorAll('.set-stars').forEach(group => {
+  group.addEventListener('click', e => {
+    const star = e.target.closest('.star');
+    if (!star) return;
+    const value = parseInt(star.dataset.value, 10);
+    group.dataset.rating = value;
+    group.querySelectorAll('.star').forEach(s => {
+      s.classList.toggle('filled', parseInt(s.dataset.value, 10) <= value);
+    });
+  });
+});
+
+// ── Submit Weekly Feedback ──
+// This runs INSIDE the srcdoc iframe. Since srcdoc documents inherit the
+// parent's origin, this page's own localStorage is the SAME storage the
+// Supabase client on dashbord.html already wrote the session into — so we
+// can create a fresh client here and read that session directly, no
+// postMessage bridge to the parent page needed.
+(function () {
+  const btn = document.getElementById('submitFeedbackBtn');
+  const status = document.getElementById('feedbackStatus');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    const entries = [];
+    document.querySelectorAll('.set-cell').forEach(cell => {
+      const weightInput = cell.querySelector('.weight-input');
+      const starsEl = cell.querySelector('.set-stars');
+      const weight = weightInput && weightInput.value !== '' ? parseFloat(weightInput.value) : null;
+      const rating = starsEl ? parseInt(starsEl.dataset.rating || '0', 10) : 0;
+      if (weight === null && rating === 0) return; // skip untouched sets
+      entries.push({
+        day_index: parseInt(cell.dataset.dayIndex, 10),
+        day_name: cell.dataset.dayName,
+        exercise: cell.dataset.exercise,
+        set_number: parseInt(cell.dataset.setNumber, 10),
+        weight_kg: weight,
+        difficulty: rating || null,
+      });
+    });
+
+    if (entries.length === 0) {
+      status.textContent = 'Fill in at least one set first';
+      status.className = 'feedback-status err';
+      return;
+    }
+
+    btn.disabled = true;
+    status.textContent = '';
+    status.className = 'feedback-status';
+
+    try {
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js');
+      const supabase = createClient(
+        'https://yabclxadadynmprymcns.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
+      );
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Session expired — go back and log in again.');
+
+      const res = await fetch('https://ai-project-login-de6g.onrender.com/api/submit-feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ entries }),
+      });
+
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+      const data = await res.json();
+      status.textContent = `✓ Saved ${data.saved} sets`;
+      status.className = 'feedback-status ok';
+    } catch (err) {
+      status.textContent = '✗ ' + err.message;
+      status.className = 'feedback-status err';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
 </script>
 </body>
 </html>
