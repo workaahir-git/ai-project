@@ -4,123 +4,193 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>{{ user.name }} {{ plan.goal_label }} Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --lime:#8b7bff;
-  --lime-dim:#3b82f6;
-  --lime-glow:#7c3aed22;
-  --bg:#07040d;
-  --bg2:#100a1f;
-  --bg3:#180f28;
-  --bg4:#221632;
+  --lime:#a855f7;
+  --lime-dim:#7c3aed;
+  --lime-glow:#a855f722;
+  --bg:#0a0714;
+  --bg2:#150f24;
+  --bg3:#1c1330;
+  --bg4:#241a3a;
   --border:#ffffff0f;
   --border-hi:#ffffff1a;
   --text:#F0F0F0;
   --muted:#8983a8;
   --dim:#3d3556;
+  --sidebar-w:230px;
+  --sidebar-w-collapsed:76px;
+  --topbar-h:64px;
 }
 html,body{background:
     radial-gradient(560px 460px at 6% 0%, #4c1d9535, transparent 60%),
     radial-gradient(600px 500px at 100% 100%, #1d4ed830, transparent 60%),
     var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
-.hdr-title,.card-title,.day-name{font-family:'Space Grotesk',sans-serif}
-body{padding-bottom:76px}
+.hdr-title,.card-title,.day-name,.sb-brand span,.dt-date{font-family:'Space Grotesk',sans-serif}
 
-/* ── HEADER ── */
-.hdr{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
-.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.hdr-name{font-size:11px;font-weight:600;color:var(--lime);letter-spacing:2px;text-transform:uppercase}
-.hdr-badge{font-size:10px;font-weight:600;background:var(--lime-glow);color:var(--lime);border:1px solid var(--lime);border-radius:20px;padding:3px 10px;letter-spacing:1px}
-.hdr-title{font-size:26px;font-weight:900;letter-spacing:-0.5px;color:#fff;margin-bottom:2px}
-.hdr-sub{font-size:12px;color:var(--muted)}
+/* ══════════ APP SHELL ══════════ */
+.app-shell{display:flex;min-height:100vh}
 
-/* ── STAT CARDS ── */
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:14px 18px}
-.sc{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:13px 14px}
-.sc-label{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
-.sc-val{font-size:24px;font-weight:800;color:#fff;letter-spacing:-0.5px}
-.sc-val.accent{color:var(--lime)}
-.sc-sub{font-size:10px;color:var(--muted);margin-top:2px}
+/* ── SIDEBAR ── */
+.sidebar{
+  width:var(--sidebar-w);flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:20px 14px;position:sticky;top:0;height:100vh;
+  transition:width .22s ease,transform .22s ease;overflow:hidden;z-index:300;
+}
+.sidebar.collapsed{width:var(--sidebar-w-collapsed)}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:4px 6px 22px;white-space:nowrap}
+.sb-brand-icon{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#a855f7,#6366f1);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;box-shadow:0 8px 22px -8px #7c3aed99}
+.sb-brand span{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.3px}
+.sidebar.collapsed .sb-label,.sidebar.collapsed .sb-brand span,.sidebar.collapsed .sb-progress-wrap{display:none}
 
-/* ── SECTIONS ── */
-.section{display:none;padding:0 18px 12px;animation:fadeIn .18s ease}
+.sb-progress-wrap{padding:2px 6px 20px;white-space:nowrap}
+.sb-progress-day{font-size:20px;font-weight:800;color:#fff;margin-bottom:8px}
+.sb-progress-track{height:6px;background:var(--bg4);border-radius:4px;overflow:hidden;position:relative}
+.sb-progress-fill{height:100%;background:linear-gradient(90deg,#a855f7,#6366f1);border-radius:4px}
+.sb-progress-frac{font-size:10px;color:var(--muted);margin-top:6px;text-align:right}
+
+.sb-nav{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto}
+.sb-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;border:none;background:none;color:var(--muted);font-size:13.5px;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap;transition:background .15s,color .15s}
+.sb-item svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.sb-item:hover{background:var(--bg3);color:#ddd}
+.sb-item.active{background:linear-gradient(100deg,#7c3aed40,#3b82f640);color:#fff;box-shadow:inset 0 0 0 1px var(--lime-dim)}
+.sidebar.collapsed .sb-item{justify-content:center;padding:12px}
+
+.sb-collapse-btn{margin-top:auto;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;border:1px solid var(--border-hi);background:var(--bg3);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.sb-collapse-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;transition:transform .2s}
+.sidebar.collapsed .sb-collapse-btn svg{transform:rotate(180deg)}
+.sidebar.collapsed .sb-collapse-btn span{display:none}
+.sidebar.collapsed .sb-collapse-btn{justify-content:center}
+
+/* mobile overlay */
+.sb-overlay{display:none;position:fixed;inset:0;background:#000a;z-index:290}
+.sb-overlay.show{display:block}
+
+/* ── MAIN ── */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+
+.topbar{
+  height:var(--topbar-h);flex-shrink:0;display:flex;align-items:center;gap:14px;
+  padding:0 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:100;
+}
+.hamburger{display:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--border-hi);background:var(--bg2);color:var(--text);align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.hamburger svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+
+.tb-goal{display:flex;flex-direction:column;gap:1px;white-space:nowrap}
+.tb-goal-label{font-size:10px;font-weight:700;color:var(--lime);letter-spacing:1.5px;text-transform:uppercase}
+.tb-goal-title{font-size:15px;font-weight:800;color:#fff}
+
+.tb-diff{display:flex;align-items:center;gap:8px;margin-left:auto;white-space:nowrap}
+.tb-diff-ring{width:28px;height:28px;border-radius:50%;background:conic-gradient(var(--lime) var(--ring-pct,70%),var(--bg4) 0);position:relative;flex-shrink:0}
+.tb-diff-ring::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--bg)}
+.tb-diff-label{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.tb-stars{color:var(--lime);font-size:13px;letter-spacing:1px}
+
+.tb-user{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.tb-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#6366f1);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+.tb-username{font-size:12.5px;font-weight:700;color:#eee;white-space:nowrap}
+
+/* ── DAY STRIP ── */
+.day-strip{display:flex;gap:8px;padding:14px 22px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--border)}
+.day-strip::-webkit-scrollbar{display:none}
+.dt{flex:1;min-width:104px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:10px 14px;cursor:pointer;transition:all .15s}
+.dt.active{background:linear-gradient(135deg,#7c3aed,#6d28d9);border-color:transparent;box-shadow:0 10px 26px -12px #7c3aed88}
+.dt-date{font-size:13.5px;font-weight:700;color:#eee}
+.dt.active .dt-date{color:#fff}
+.dt-bar{height:4px;background:var(--bg4);border-radius:3px;margin-top:9px;overflow:hidden}
+.dt.active .dt-bar{background:#ffffff33}
+.dt-bar-fill{height:100%;border-radius:3px;background:var(--lime)}
+.dt.active .dt-bar-fill{background:#fff}
+.dt-rest .dt-date{color:var(--muted)}
+
+/* ── CONTENT ── */
+.content{flex:1;padding:20px 22px 60px;max-width:1180px;width:100%}
+.section{display:none;animation:fadeIn .18s ease}
 .section.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.sec-label{font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:6px 0 12px}
+.sec-label:first-child{margin-top:0}
 
-.sec-label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:18px 0 10px}
+/* ── STAT CARDS ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}
+.sc{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px}
+.sc-label{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
+.sc-val{font-size:25px;font-weight:800;color:#fff;letter-spacing:-0.5px}
+.sc-val.accent{color:var(--lime)}
+.sc-sub{font-size:10.5px;color:var(--muted);margin-top:3px}
 
 /* ── CARDS ── */
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:10px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:12px}
 .card-title{font-size:11px;font-weight:700;color:var(--lime);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
 
-/* ── BOTTOM NAV ── */
-.bnav{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);display:flex;padding:8px 0 4px;z-index:200}
-.nb{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px;background:none;border:none;color:var(--muted);font-size:9px;font-weight:600;letter-spacing:.5px;cursor:pointer;transition:color .15s;text-transform:uppercase}
-.nb svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
-.nb.active{color:var(--lime)}
-
 /* ── DAY CARDS (workout) ── */
-.day-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;margin-bottom:10px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.days-grid{display:grid;grid-template-columns:1fr;gap:10px}
+.day-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;overflow:hidden;cursor:pointer;transition:border-color .15s}
 .day-card.open{border-color:var(--lime)}
-.day-header{display:flex;align-items:center;gap:12px;padding:14px 16px}
-.day-dot{width:34px;height:34px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;transition:all .15s}
+.day-header{display:flex;align-items:center;gap:12px;padding:15px 18px}
+.day-dot{width:36px;height:36px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;transition:all .15s}
 .day-card.open .day-dot{background:var(--lime-glow);border-color:var(--lime);color:var(--lime)}
 .day-card.rest-day .day-dot{opacity:.4}
-.day-meta{flex:1}
-.day-name{font-size:14px;font-weight:700;color:#fff;margin-bottom:2px}
-.day-type{font-size:11px;color:var(--muted);font-weight:500}
+.day-meta{flex:1;min-width:0}
+.day-name{font-size:14.5px;font-weight:700;color:#fff;margin-bottom:2px}
+.day-type{font-size:11.5px;color:var(--muted);font-weight:500}
 .day-card.open .day-name{color:var(--lime)}
-.day-toggle{font-size:18px;color:var(--dim);transition:transform .2s,color .15s}
+.day-toggle{font-size:18px;color:var(--dim);transition:transform .2s,color .15s;flex-shrink:0}
 .day-card.open .day-toggle{transform:rotate(45deg);color:var(--lime)}
-.day-body{display:none;padding:0 16px 16px}
+.day-body{display:none;padding:0 18px 18px}
 .day-card.open .day-body{display:block}
 
-.warmup-pill{display:inline-block;background:var(--bg3);border:1px solid var(--border-hi);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;width:100%}
+.warmup-pill{display:inline-block;background:var(--bg3);border:1px solid var(--border-hi);border-radius:8px;padding:9px 13px;font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;width:100%}
 .warmup-pill strong{color:#bbb;font-weight:600}
 
-/* ── EXERCISE ROWS ── */
-.ex-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)}
+/* ── EXERCISE ROWS (with sets/weight/difficulty like the reference UI) ── */
+.ex-row{padding:13px 0;border-bottom:1px solid var(--border)}
 .ex-row:last-child{border-bottom:none;padding-bottom:0}
-.ex-name{font-size:13px;font-weight:600;color:#e8e8e8;margin-bottom:2px}
-.ex-muscle{font-size:11px;color:var(--muted)}
-.ex-badge{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
-.sets-pill{background:var(--lime-glow);border:1px solid var(--lime);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--lime);white-space:nowrap}
-.reps-pill{background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:3px 9px;font-size:11px;font-weight:600;color:#bbb;white-space:nowrap;text-align:right}
+.ex-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.ex-name{font-size:14px;font-weight:700;color:#e8e8e8}
+.ex-muscle{font-size:11.5px;color:var(--muted);font-weight:500}
+.ex-sets-total{background:var(--lime-glow);border:1px solid var(--lime);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--lime);white-space:nowrap;flex-shrink:0}
+.set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.set-cell{background:var(--bg3);border:1px solid var(--border-hi);border-radius:10px;padding:9px 11px}
+.set-cell-label{font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.set-reps{font-size:12px;font-weight:600;color:#ddd;margin-bottom:4px}
+.set-stars{color:var(--lime);font-size:12px;letter-spacing:1px}
 
-.safety-note{margin-top:12px;background:var(--bg3);border-left:2px solid var(--lime);border-radius:0 8px 8px 0;padding:8px 12px;font-size:11.5px;color:var(--muted);line-height:1.55}
+.safety-note{margin-top:12px;background:var(--bg3);border-left:2px solid var(--lime);border-radius:0 8px 8px 0;padding:9px 13px;font-size:11.5px;color:var(--muted);line-height:1.55}
 .safety-note strong{color:#aaa;font-weight:600}
 
-/* ── MEAL TABS ── */
-.meal-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:12px;scrollbar-width:none}
+/* ── MEAL TABS (Diet) ── */
+.meal-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px;scrollbar-width:none}
 .meal-tabs::-webkit-scrollbar{display:none}
-.mtab{flex-shrink:0;padding:7px 14px;border-radius:20px;border:1px solid var(--border-hi);background:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.3px}
+.mtab{flex-shrink:0;padding:8px 15px;border-radius:20px;border:1px solid var(--border-hi);background:none;color:var(--muted);font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.3px}
 .mtab.active{background:linear-gradient(100deg,#7c3aed,#3b82f6);color:#fff;border-color:transparent}
 
 .meal-panel{display:none}
 .meal-panel.active{display:block}
+.diet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
 
-.meal-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.meal-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
 .meal-row:last-child{border-bottom:none}
 .opt-num{width:28px;height:28px;border-radius:8px;background:var(--bg3);border:1px solid var(--border-hi);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
-.meal-info{flex:1}
-.meal-name{font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:3px}
-.meal-macros{font-size:11px;color:var(--muted)}
+.meal-info{flex:1;min-width:0}
+.meal-name{font-size:13.5px;font-weight:600;color:#e0e0e0;margin-bottom:3px}
+.meal-macros{font-size:11.5px;color:var(--muted)}
 .mac-hi{color:var(--lime);font-weight:700}
-.kcal-hi{color:#888;font-weight:600}
+.kcal-hi{color:#999;font-weight:600}
 
-/* ── RECOVERY ── */
-.rec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.rec-item{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:14px 12px}
-.rec-icon{font-size:20px;margin-bottom:8px}
+/* ── RECOVERY / PROGRESS ── */
+.rec-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+.rec-item{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px 14px}
+.rec-icon{font-size:20px;margin-bottom:9px}
 .rec-val{font-size:18px;font-weight:800;color:#fff;margin-bottom:2px}
 .rec-label{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase}
 
-.tip-list{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:4px 16px}
-.tip-row{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;color:#c0c0d0;line-height:1.5}
+.tip-list{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:4px 18px}
+.tip-row{display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);font-size:13.5px;color:#c0c0d0;line-height:1.5}
 .tip-row:last-child{border-bottom:none}
-.tip-dot{width:5px;height:5px;border-radius:50%;background:var(--lime);flex-shrink:0;margin-top:6px}
+.tip-dot{width:5px;height:5px;border-radius:50%;background:var(--lime);flex-shrink:0;margin-top:7px}
 
 /* ── OVERVIEW WEEK ── */
 .week-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
@@ -131,208 +201,367 @@ body{padding-bottom:76px}
 .wrest{background:var(--dim)}
 .wlabel{font-size:11px;color:var(--muted);font-weight:500;text-align:right;width:80px;flex-shrink:0}
 .wlabel.active-day{color:var(--lime);font-weight:700}
+
+/* ══════════ RESPONSIVE ══════════ */
+
+/* Tablet — sidebar auto-collapses to icon rail */
+@media (max-width:1024px){
+  .sidebar{position:fixed;left:0;top:0}
+  .sidebar:not(.collapsed){width:var(--sidebar-w)}
+  .app-shell{padding-left:var(--sidebar-w-collapsed)}
+  .sidebar.collapsed + .sb-overlay{display:none}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .rec-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* Phone — sidebar becomes a full slide-in drawer, hamburger appears */
+@media (max-width:768px){
+  .app-shell{padding-left:0}
+  .hamburger{display:flex}
+  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);width:250px !important}
+  .sidebar.mobile-open{transform:translateX(0)}
+  .sidebar.collapsed{width:250px}
+  .sidebar.collapsed .sb-label,.sidebar.collapsed .sb-brand span,.sidebar.collapsed .sb-progress-wrap,
+  .sidebar.collapsed .sb-collapse-btn span{display:block}
+  .sidebar .sb-collapse-btn{display:none}
+  .topbar{padding:0 14px;gap:10px}
+  .tb-goal-title{font-size:13.5px}
+  .tb-username{display:none}
+  .tb-stars{display:none}
+  .content{padding:16px 14px 70px}
+  .day-strip{padding:12px 14px}
+  .dt{min-width:88px}
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .rec-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .set-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:420px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .set-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 
-<!-- ══════════ HEADER ══════════ -->
-<div class="hdr">
-  <div class="hdr-top">
-    <span class="hdr-name">{{ plan.goal_label }}</span>
-    <span class="hdr-badge">Active</span>
-  </div>
-  <div class="hdr-title">{{ user.name }}</div>
-  <div class="hdr-sub">{{ plan.daily_calories }} kcal &nbsp;·&nbsp; {{ plan.protein_range }} protein &nbsp;·&nbsp; {{ user.current_weight }}kg → {{ user.target_weight }}kg</div>
-</div>
+<div class="app-shell">
 
-<!-- ══════════ STAT CARDS ══════════ -->
-<div class="stats">
-  <div class="sc">
-    <div class="sc-label">Current weight</div>
-    <div class="sc-val">{{ user.current_weight }} kg</div>
-    <div class="sc-sub">Starting point</div>
-  </div>
-  <div class="sc">
-    <div class="sc-label">Target weight</div>
-    <div class="sc-val accent">{{ user.target_weight }} kg</div>
-    <div class="sc-sub">{{ plan.weight_to_lose }}</div>
-  </div>
-  <div class="sc">
-    <div class="sc-label">Daily calories</div>
-    <div class="sc-val">{{ plan.daily_calories }}</div>
-    <div class="sc-sub">{{ plan.calorie_phase }}</div>
-  </div>
-  <div class="sc">
-    <div class="sc-label">Daily protein</div>
-    <div class="sc-val accent">{{ plan.daily_protein_g }}g</div>
-    <div class="sc-sub">Muscle retention</div>
-  </div>
-</div>
+  <div class="sb-overlay" id="sbOverlay"></div>
 
-<!-- ══════════ OVERVIEW ══════════ -->
-<div class="section active" id="sec-overview">
-  <div class="sec-label">Weekly split</div>
-  <div class="card">
-    <div class="card-title">Training schedule</div>
-    {% for day in workout.weekly_schedule %}
-    <div class="week-row">
-      <span class="wday">{{ day.short }}</span>
-      <div class="wbar-bg">
-        <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="width:{{ day.bar_width }}%"></div>
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-brand">
+      <div class="sb-brand-icon">💪</div>
+      <span>{{ plan.goal_label }}</span>
+    </div>
+
+    <div class="sb-progress-wrap">
+      <div class="sb-progress-day">Today</div>
+      <div class="sb-progress-track"><div class="sb-progress-fill" style="width:70%"></div></div>
+      <div class="sb-progress-frac">On track</div>
+    </div>
+
+    <nav class="sb-nav">
+      <button class="sb-item active" data-sec="overview">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span class="sb-label">Overview</span>
+      </button>
+      <button class="sb-item" data-sec="workout">
+        <svg viewBox="0 0 24 24"><path d="M6 4v16M18 4v16M6 12h12M3 7l3-3M21 7l-3-3M3 17l3 3M21 17l-3 3"/></svg>
+        <span class="sb-label">Workouts</span>
+      </button>
+      <button class="sb-item" data-sec="diet">
+        <svg viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M5 8h13v9a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V8z"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="8" y1="3" x2="16" y2="3"/></svg>
+        <span class="sb-label">Diet</span>
+      </button>
+      <button class="sb-item" data-sec="recovery">
+        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span class="sb-label">Progress</span>
+      </button>
+    </nav>
+
+    <button class="sb-collapse-btn" id="collapseBtn">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+      <span>Collapse</span>
+    </button>
+  </aside>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <div class="main">
+
+    <div class="topbar">
+      <button class="hamburger" id="hamburgerBtn">
+        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="tb-goal">
+        <span class="tb-goal-label">{{ plan.goal_label }}</span>
+        <span class="tb-goal-title">Overall Progress</span>
       </div>
-      <span class="wlabel{% if not day.is_rest %} active-day{% endif %}">{{ day.label }}</span>
-    </div>
-    {% endfor %}
-  </div>
-
-  <div class="sec-label">Daily non-negotiables</div>
-  <div class="rec-grid">
-    {% for item in recovery.daily_nonneg %}
-    <div class="rec-item">
-      <div class="rec-icon">{{ item.icon }}</div>
-      <div class="rec-val">{{ item.value }}</div>
-      <div class="rec-label">{{ item.label }}</div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-<!-- ══════════ WORKOUT ══════════ -->
-<div class="section" id="sec-workout">
-  <div class="sec-label">Tap a day to expand</div>
-
-  {% for day in workout.days %}
-  {% if day.is_rest %}
-  <div class="day-card rest-day">
-    <div class="day-header">
-      <div class="day-dot">{{ day.short }}</div>
-      <div class="day-meta">
-        <div class="day-name" style="color:var(--muted)">{{ day.name }}</div>
-        <div class="day-type">{{ day.type }}</div>
-      </div>
-      <div class="day-toggle" style="color:transparent">+</div>
-    </div>
-  </div>
-  {% else %}
-  <div class="day-card" onclick="toggleDay(this)">
-    <div class="day-header">
-      <div class="day-dot">{{ day.short }}</div>
-      <div class="day-meta">
-        <div class="day-name">{{ day.name }}</div>
-        <div class="day-type">{{ day.type }}</div>
-      </div>
-      <div class="day-toggle">+</div>
-    </div>
-    <div class="day-body">
-      <div class="warmup-pill"><strong>Warmup:</strong> {{ day.warmup_exercises | join(' · ') }}</div>
-      {% for ex in day.exercises %}
-      <div class="ex-row">
+      <div class="tb-diff">
+        <div class="tb-diff-ring" style="--ring-pct:70%"></div>
         <div>
-          <div class="ex-name">{{ ex.name }}</div>
-          <div class="ex-muscle">{{ ex.muscle }}</div>
+          <div class="tb-diff-label">Difficulty</div>
+          <div class="tb-stars">★★★★☆</div>
         </div>
-        <div class="ex-badge">
-          <span class="sets-pill">{{ ex.sets }} sets</span>
-          <span class="reps-pill">{{ ex.reps }}</span>
-        </div>
+      </div>
+      <div class="tb-user">
+        <div class="tb-avatar">{{ user.name[0] | default('U') }}</div>
+        <span class="tb-username">{{ user.name }}</span>
+      </div>
+    </div>
+
+    <!-- ══════════ DAY STRIP ══════════ -->
+    <div class="day-strip" id="dayStrip">
+      {% for day in workout.days %}
+      <div class="dt{% if loop.index0 == 0 %} active{% endif %}{% if day.is_rest %} dt-rest{% endif %}" data-day-index="{{ loop.index0 }}">
+        <div class="dt-date">{{ day.short }} {{ day.name }}</div>
+        <div class="dt-bar"><div class="dt-bar-fill" style="width:{% if day.is_rest %}0{% else %}75{% endif %}%"></div></div>
       </div>
       {% endfor %}
-      <div class="safety-note"><strong>Safety:</strong> {{ day.safety }}</div>
     </div>
-  </div>
-  {% endif %}
-  {% endfor %}
-</div>
 
-<!-- ══════════ DIET ══════════ -->
-<div class="section" id="sec-diet">
-  <div class="meal-tabs" id="mealTabs">
-    {% for meal in diet.meals %}
-    <button class="mtab{% if loop.first %} active{% endif %}" data-meal="{{ meal.id }}">{{ meal.tab_label }}</button>
-    {% endfor %}
-  </div>
+    <div class="content">
 
-  {% for meal in diet.meals %}
-  <div class="meal-panel{% if loop.first %} active{% endif %}" id="meal-{{ meal.id }}">
-    <div class="card">
-      <div class="card-title">{{ meal.title }} · ~{{ meal.kcal_range }} kcal</div>
-      {% for opt in meal.options %}
-      <div class="meal-row">
-        <div class="opt-num">{{ loop.index }}</div>
-        <div class="meal-info">
-          <div class="meal-name">{{ opt.food }}</div>
-          <div class="meal-macros">
-            <span class="kcal-hi">{{ opt.kcal }} kcal</span>
-            &nbsp;·&nbsp;
-            <span class="mac-hi">{{ opt.protein_g }}g</span> protein
-            &nbsp;·&nbsp;
-            <span class="mac-hi">{{ opt.carb_g }}g</span> carbs
-            &nbsp;·&nbsp;
-            <span class="mac-hi">{{ opt.fat_g }}g</span> fat
+      <!-- ══════════ OVERVIEW ══════════ -->
+      <div class="section active" id="sec-overview">
+        <div class="stats">
+          <div class="sc">
+            <div class="sc-label">Current weight</div>
+            <div class="sc-val">{{ user.current_weight }} kg</div>
+            <div class="sc-sub">Starting point</div>
+          </div>
+          <div class="sc">
+            <div class="sc-label">Target weight</div>
+            <div class="sc-val accent">{{ user.target_weight }} kg</div>
+            <div class="sc-sub">{{ plan.weight_to_lose }}</div>
+          </div>
+          <div class="sc">
+            <div class="sc-label">Daily calories</div>
+            <div class="sc-val">{{ plan.daily_calories }}</div>
+            <div class="sc-sub">{{ plan.calorie_phase }}</div>
+          </div>
+          <div class="sc">
+            <div class="sc-label">Daily protein</div>
+            <div class="sc-val accent">{{ plan.daily_protein_g }}g</div>
+            <div class="sc-sub">Muscle retention</div>
           </div>
         </div>
+
+        <div class="sec-label">Weekly split</div>
+        <div class="card">
+          {% for day in workout.days %}
+          <div class="week-row">
+            <div class="wday">{{ day.short }}</div>
+            <div class="wbar-bg">
+              <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="width:{{ day.bar_width }}%"></div>
+            </div>
+            <span class="wlabel{% if not day.is_rest %} active-day{% endif %}">{{ day.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="sec-label">Daily non-negotiables</div>
+        <div class="rec-grid">
+          {% for item in recovery.daily_nonneg %}
+          <div class="rec-item">
+            <div class="rec-icon">{{ item.icon }}</div>
+            <div class="rec-val">{{ item.value }}</div>
+            <div class="rec-label">{{ item.label }}</div>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-      {% endfor %}
+
+      <!-- ══════════ WORKOUT (with sets / weight / difficulty) ══════════ -->
+      <div class="section" id="sec-workout">
+        <div class="sec-label">Tap a day to expand</div>
+
+        <div class="days-grid" id="daysGrid">
+          {% for day in workout.days %}
+          {% if day.is_rest %}
+          <div class="day-card rest-day" data-day-index="{{ loop.index0 }}">
+            <div class="day-header">
+              <div class="day-dot">{{ day.short }}</div>
+              <div class="day-meta">
+                <div class="day-name" style="color:var(--muted)">{{ day.name }}</div>
+                <div class="day-type">{{ day.type }}</div>
+              </div>
+              <div class="day-toggle" style="color:transparent">+</div>
+            </div>
+          </div>
+          {% else %}
+          <div class="day-card" data-day-index="{{ loop.index0 }}" onclick="toggleDay(this)">
+            <div class="day-header">
+              <div class="day-dot">{{ day.short }}</div>
+              <div class="day-meta">
+                <div class="day-name">{{ day.name }}</div>
+                <div class="day-type">{{ day.type }}</div>
+              </div>
+              <div class="day-toggle">+</div>
+            </div>
+            <div class="day-body">
+              <div class="warmup-pill"><strong>Warmup:</strong> {{ day.warmup_exercises | join(' · ') }}</div>
+              {% for ex in day.exercises %}
+              <div class="ex-row">
+                <div class="ex-head">
+                  <div>
+                    <div class="ex-name">{{ ex.name }}</div>
+                    <div class="ex-muscle">{{ ex.muscle }}</div>
+                  </div>
+                  <span class="ex-sets-total">{{ ex.sets }} sets</span>
+                </div>
+                <div class="set-grid">
+                  {% for i in range(ex.sets) %}
+                  <div class="set-cell">
+                    <div class="set-cell-label">Set {{ i + 1 }}</div>
+                    <div class="set-reps">{{ ex.reps }}</div>
+                    <div class="set-stars">{% for s in range(5) %}{% if s < (ex.difficulty_stars | default(4)) %}★{% else %}☆{% endif %}{% endfor %}</div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endfor %}
+              <div class="safety-note"><strong>Safety:</strong> {{ day.safety }}</div>
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- ══════════ DIET ══════════ -->
+      <div class="section" id="sec-diet">
+        <div class="meal-tabs" id="mealTabs">
+          {% for meal in diet.meals %}
+          <button class="mtab{% if loop.first %} active{% endif %}" data-meal="{{ meal.id }}">{{ meal.tab_label }}</button>
+          {% endfor %}
+        </div>
+
+        {% for meal in diet.meals %}
+        <div class="meal-panel{% if loop.first %} active{% endif %}" id="meal-{{ meal.id }}">
+          <div class="card">
+            <div class="card-title">{{ meal.title }} · ~{{ meal.kcal_range }} kcal</div>
+            <div class="diet-grid">
+              {% for opt in meal.options %}
+              <div class="meal-row">
+                <div class="opt-num">{{ loop.index }}</div>
+                <div class="meal-info">
+                  <div class="meal-name">{{ opt.food }}</div>
+                  <div class="meal-macros">
+                    <span class="kcal-hi">{{ opt.kcal }} kcal</span>
+                    &nbsp;·&nbsp;
+                    <span class="mac-hi">{{ opt.protein_g }}g</span> protein
+                    &nbsp;·&nbsp;
+                    <span class="mac-hi">{{ opt.carb_g }}g</span> carbs
+                    &nbsp;·&nbsp;
+                    <span class="mac-hi">{{ opt.fat_g }}g</span> fat
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- ══════════ RECOVERY / PROGRESS ══════════ -->
+      <div class="section" id="sec-recovery">
+        <div class="sec-label">Key numbers</div>
+        <div class="rec-grid">
+          {% for item in recovery.key_numbers %}
+          <div class="rec-item">
+            <div class="rec-icon">{{ item.icon }}</div>
+            <div class="rec-val">{{ item.value }}</div>
+            <div class="rec-label">{{ item.label }}</div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% for section in recovery.tip_sections %}
+        <div class="sec-label">{{ section.title }}</div>
+        <div class="tip-list">
+          {% for tip in section.tips %}
+          <div class="tip-row"><div class="tip-dot"></div>{{ tip }}</div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
     </div>
   </div>
-  {% endfor %}
 </div>
-
-<!-- ══════════ RECOVERY ══════════ -->
-<div class="section" id="sec-recovery">
-  <div class="sec-label">Key numbers</div>
-  <div class="rec-grid">
-    {% for item in recovery.key_numbers %}
-    <div class="rec-item">
-      <div class="rec-icon">{{ item.icon }}</div>
-      <div class="rec-val">{{ item.value }}</div>
-      <div class="rec-label">{{ item.label }}</div>
-    </div>
-    {% endfor %}
-  </div>
-
-  {% for section in recovery.tip_sections %}
-  <div class="sec-label">{{ section.title }}</div>
-  <div class="tip-list">
-    {% for tip in section.tips %}
-    <div class="tip-row"><div class="tip-dot"></div>{{ tip }}</div>
-    {% endfor %}
-  </div>
-  {% endfor %}
-</div>
-
-<!-- ══════════ BOTTOM NAV ══════════ -->
-<nav class="bnav">
-  <button class="nb active" data-sec="overview">
-    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-    Overview
-  </button>
-  <button class="nb" data-sec="workout">
-    <svg viewBox="0 0 24 24"><path d="M6 4v16M18 4v16M6 12h12M3 7l3-3M21 7l-3-3M3 17l3 3M21 17l-3 3"/></svg>
-    Workout
-  </button>
-  <button class="nb" data-sec="diet">
-    <svg viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M5 8h13v9a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V8z"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="8" y1="3" x2="16" y2="3"/></svg>
-    Diet
-  </button>
-  <button class="nb" data-sec="recovery">
-    <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-    Recovery
-  </button>
-</nav>
 
 <script>
-document.querySelectorAll('.nb').forEach(btn => {
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sbOverlay');
+const collapseBtn = document.getElementById('collapseBtn');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+
+// Desktop/tablet: collapse to icon rail
+collapseBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('collapsed');
+});
+
+// Mobile: slide-in drawer
+function openMobileNav() {
+  sidebar.classList.add('mobile-open');
+  overlay.classList.add('show');
+}
+function closeMobileNav() {
+  sidebar.classList.remove('mobile-open');
+  overlay.classList.remove('show');
+}
+hamburgerBtn.addEventListener('click', () => {
+  sidebar.classList.contains('mobile-open') ? closeMobileNav() : openMobileNav();
+});
+overlay.addEventListener('click', closeMobileNav);
+
+// Auto-collapse sidebar to icon rail on tablet widths on first load
+function autoCollapseForViewport() {
+  if (window.innerWidth <= 1024 && window.innerWidth > 768) {
+    sidebar.classList.add('collapsed');
+  }
+}
+autoCollapseForViewport();
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) closeMobileNav();
+});
+
+// ── Sidebar nav → section switching ──
+document.querySelectorAll('.sb-item').forEach(btn => {
   btn.addEventListener('click', () => {
     const sec = btn.dataset.sec;
-    document.querySelectorAll('.nb').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('sec-' + sec).classList.add('active');
     window.scrollTo({top:0,behavior:'smooth'});
+    if (window.innerWidth <= 768) closeMobileNav();
   });
 });
 
+// ── Day strip → jump to Workout tab and open that day ──
+document.getElementById('dayStrip').addEventListener('click', e => {
+  const dt = e.target.closest('.dt');
+  if (!dt) return;
+  document.querySelectorAll('.dt').forEach(d => d.classList.remove('active'));
+  dt.classList.add('active');
+
+  document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
+  document.querySelector('.sb-item[data-sec="workout"]').classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-workout').classList.add('active');
+
+  const idx = dt.dataset.dayIndex;
+  const card = document.querySelector('.day-card[data-day-index="' + idx + '"]');
+  if (card && !card.classList.contains('rest-day')) {
+    document.querySelectorAll('.day-card.open').forEach(c => c.classList.remove('open'));
+    card.classList.add('open');
+    card.scrollIntoView({block:'center',behavior:'smooth'});
+  }
+});
+
+// ── Meal tabs (Diet) ──
 document.getElementById('mealTabs').addEventListener('click', e => {
   const tab = e.target.closest('.mtab');
   if (!tab) return;
@@ -342,6 +571,7 @@ document.getElementById('mealTabs').addEventListener('click', e => {
   document.getElementById('meal-' + tab.dataset.meal).classList.add('active');
 });
 
+// ── Expand/collapse a workout day ──
 function toggleDay(card) {
   if (card.classList.contains('rest-day')) return;
   const isOpen = card.classList.contains('open');
