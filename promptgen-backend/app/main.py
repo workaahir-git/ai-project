@@ -103,7 +103,33 @@ def _get_active_plan(member_id: str) -> dict | None:
     return res.data[0] if res.data else None
 
 
+@app.post("/api/reset-plan")
+def reset_plan(
+    user: dict = Depends(get_current_user),
+    member: dict = Depends(get_or_join_member),
+):
+    """Dev/testing helper: expires the caller's own active plan row(s) so the
+    NEXT /result call is forced to regenerate from scratch (fresh Jinja2
+    render off whatever is currently in Templates/result.html) instead of
+    serving the cached rendered_html from Supabase.
+
+    Scoped to the authenticated caller's own member_id only — this cannot be
+    used to reset anyone else's plan. Safe to call as many times as you like;
+    if there's nothing active it's just a no-op.
+    """
+    res = (
+        supabase.table("plans")
+        .update({"status": "expired"})
+        .eq("member_id", member["id"])
+        .eq("status", "active")
+        .execute()
+    )
+    cleared = len(res.data) if res.data else 0
+    return {"cleared": cleared, "member_id": member["id"]}
+
+
 @app.get("/api/my-plan")
+
 def my_plan(
     user: dict = Depends(get_current_user),
     member: dict = Depends(get_or_join_member),

@@ -148,6 +148,30 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
     await supabase.auth.signOut()
     window.location.href = 'login.html.html'
   })
+
+  // Dev helper: expire the cached plan row so the next "Generate My Plan"
+  // is forced to re-render off whatever is currently in Templates/result.html
+  // instead of serving the old saved HTML from Supabase. Safe to remove
+  // this button before going to real production users.
+  document.getElementById('resetPlanBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('resetPlanBtn')
+    const original = btn.textContent
+    btn.disabled = true
+    btn.textContent = 'Resetting…'
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('https://ai-project-login-de6g.onrender.com/api/reset-plan', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      })
+      const data = await res.json().catch(() => ({}))
+      btn.textContent = res.ok ? `✓ Cleared (${data.cleared ?? 0})` : '✗ Failed'
+    } catch (err) {
+      btn.textContent = '✗ Failed'
+    } finally {
+      setTimeout(() => { btn.textContent = original; btn.disabled = false }, 2000)
+    }
+  })
 </script>
 <nav class="topnav">
   <div class="logo">
@@ -156,6 +180,7 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
   </div>
   <div class="right">
     <a class="dash-link" href="dashbord.html">Dashboard</a>
+    <button id="resetPlanBtn" title="Dev only: clears your cached plan so the next generate re-renders the current template" style="font-size:11px;padding:6px 10px;border-radius:8px;border:1px solid #d9d9d9;background:#fff;color:#555;cursor:pointer;margin-right:8px;">↻ Reset my plan (dev)</button>
     <div class="avatar-pill">
       <div class="circle" id="navInitial">–</div>
       <span id="navName">…</span>
