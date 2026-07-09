@@ -339,8 +339,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .tip-dot{width:5px;height:5px;border-radius:50%;background:var(--lime2);box-shadow:0 0 6px #a855f799;flex-shrink:0;margin-top:7px}
 
 /* ── OVERVIEW WEEK ── */
-.week-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.week-row{display:flex;flex-direction:column;gap:5px;padding:9px 0;border-bottom:1px solid var(--border)}
 .week-row:last-child{border-bottom:none}
+.week-row-main{display:flex;align-items:center;gap:10px}
 .wday{width:28px;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .wbar-bg{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
 .wbar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width .8s cubic-bezier(.34,1.56,.64,1);width:0}
@@ -350,6 +351,10 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .wrest{background:var(--dim)}
 .wlabel{font-size:11px;color:var(--muted);font-weight:500;text-align:right;width:80px;flex-shrink:0}
 .wlabel.active-day{color:var(--lime2);font-weight:700}
+.wpct{font-size:10.5px;color:var(--dim);font-weight:600;padding-left:38px}
+.wpct.pf-over-text{color:#22c55e}
+.wpct.pf-under-text{color:#f97316}
+.wpct.pf-fatigue-text{color:#f87171;font-weight:700}
 
 /* ══════════ RESPONSIVE ══════════ */
 
@@ -517,11 +522,16 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
         <div class="card">
           {% for day in workout.days %}
           <div class="week-row" data-day-index="{{ loop.index0 }}">
-            <div class="wday">{{ day.short }}</div>
-            <div class="wbar-bg">
-              <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="width:{{ day.bar_width }}%"></div>
+            <div class="week-row-main">
+              <div class="wday">{{ day.short }}</div>
+              <div class="wbar-bg">
+                <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="width:{{ day.bar_width }}%"></div>
+              </div>
+              <span class="wlabel{% if not day.is_rest %} active-day{% endif %}">{{ day.label }}</span>
             </div>
-            <span class="wlabel{% if not day.is_rest %} active-day{% endif %}">{{ day.label }}</span>
+            {% if not day.is_rest %}
+            <div class="wpct" data-wpct>No reps logged yet</div>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -908,8 +918,9 @@ function computeAndRenderProgress() {
   document.querySelectorAll('.week-row').forEach(row => {
     const bar = row.querySelector('.wbar');
     if (!bar || bar.classList.contains('wrest')) return;
+    const pctEl = row.querySelector('[data-wpct]');
     const stats = perDay[row.dataset.dayIndex];
-    renderProgressBar(bar, null, stats ? stats.rec : 0, stats ? stats.act : 0, !!(stats && stats.any));
+    renderProgressBar(bar, pctEl, stats ? stats.rec : 0, stats ? stats.act : 0, !!(stats && stats.any));
   });
 }
 
@@ -929,7 +940,7 @@ computeAndRenderProgress();
 function renderProgressBar(fillEl, fracEl, recommended, actual, hasData) {
   if (!fillEl) return;
   fillEl.classList.remove('pf-over', 'pf-under', 'pf-fatigue');
-  if (fracEl) fracEl.classList.remove('pf-fatigue-text');
+  if (fracEl) fracEl.classList.remove('pf-fatigue-text', 'pf-over-text', 'pf-under-text');
   if (!hasData || recommended <= 0) {
     fillEl.style.width = '0%';
     if (fracEl) fracEl.textContent = 'No reps logged yet';
@@ -939,17 +950,19 @@ function renderProgressBar(fillEl, fracEl, recommended, actual, hasData) {
   fillEl.style.width = Math.min(pct, 100) + '%';
   if (pct > 150) fillEl.classList.add('pf-fatigue');
   else if (pct >= 100) fillEl.classList.add('pf-over');
-  else if (pct < 80) fillEl.classList.add('pf-under');
+  else if (pct < 90) fillEl.classList.add('pf-under');
   if (fracEl) {
     if (pct > 150) {
       fracEl.textContent = '⚠ ' + pct + '% of target reps — fatigue risk, consider adding weight instead';
       fracEl.classList.add('pf-fatigue-text');
     } else if (pct > 100) {
       fracEl.textContent = pct + '% of target reps — overachieving';
+      fracEl.classList.add('pf-over-text');
     } else if (pct >= 90) {
       fracEl.textContent = pct + '% of target reps — on track';
     } else {
       fracEl.textContent = pct + '% of target reps — below target';
+      fracEl.classList.add('pf-under-text');
     }
   }
 }
