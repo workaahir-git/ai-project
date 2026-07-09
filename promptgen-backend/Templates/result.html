@@ -415,9 +415,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
     </div>
 
     <div class="sb-progress-wrap">
-      <div class="sb-progress-day">Today</div>
-      <div class="sb-progress-track"><div class="sb-progress-fill" style="width:70%"></div></div>
-      <div class="sb-progress-frac">On track</div>
+      <div class="sb-progress-day">This week</div>
+      <div class="sb-progress-track"><div class="sb-progress-fill" id="sbProgressFill" style="width:0%"></div></div>
+      <div class="sb-progress-frac" id="sbProgressFrac">0 / 0 sets logged</div>
     </div>
 
     <nav class="sb-nav" aria-label="Dashboard sections">
@@ -818,6 +818,7 @@ function toggleExercise(row) {
 function updateExerciseStatus(fieldEl) {
   const row = fieldEl.closest('.ex-row');
   if (row) refreshExerciseStatus(row);
+  computeAndRenderProgress();
 }
 function refreshExerciseStatus(row) {
   const statusEl = row.querySelector('[data-ex-status]');
@@ -832,6 +833,42 @@ function refreshExerciseStatus(row) {
   });
   statusEl.textContent = logged + '/' + cells.length + ' logged';
   statusEl.classList.toggle('done', cells.length > 0 && logged === cells.length);
+}
+
+// Overall progress: sidebar bar = every set across the whole plan that has a
+// weight or reps value entered; each day-strip pill's own bar = just that
+// day's sets. Recalculated on every keystroke in a weight/reps field (via
+// updateExerciseStatus above) and once on load after any saved data is
+// pulled in from Supabase, so it always reflects what's actually been logged.
+function computeAndRenderProgress() {
+  const perDay = {};
+  let totalAll = 0, loggedAll = 0;
+
+  document.querySelectorAll('.set-cell').forEach(cell => {
+    const weight = cell.querySelector('.weight-input');
+    const reps = cell.querySelector('.reps-input');
+    const touched = (weight && weight.value !== '') || (reps && reps.value !== '');
+    const di = cell.dataset.dayIndex;
+    if (!perDay[di]) perDay[di] = { total: 0, logged: 0 };
+    perDay[di].total++;
+    totalAll++;
+    if (touched) { perDay[di].logged++; loggedAll++; }
+  });
+
+  const fill = document.getElementById('sbProgressFill');
+  const frac = document.getElementById('sbProgressFrac');
+  const pctAll = totalAll ? Math.round((loggedAll / totalAll) * 100) : 0;
+  if (fill) fill.style.width = pctAll + '%';
+  if (frac) frac.textContent = loggedAll + ' / ' + totalAll + ' sets logged';
+
+  document.querySelectorAll('.dt').forEach(dt => {
+    const barFill = dt.querySelector('.dt-bar-fill');
+    if (!barFill) return;
+    if (dt.classList.contains('dt-rest')) { barFill.style.width = '0%'; return; }
+    const stats = perDay[dt.dataset.dayIndex];
+    const pct = stats && stats.total ? Math.round((stats.logged / stats.total) * 100) : 0;
+    barFill.style.width = pct + '%';
+  });
 }
 
 // ── Interactive difficulty stars (one rating per exercise, not per set) ──
@@ -857,6 +894,72 @@ document.querySelectorAll('.ex-stars').forEach(group => {
   const btn = document.getElementById('submitFeedbackBtn');
   const status = document.getElementById('feedbackStatus');
   if (!btn) return;
+
+  // On load: pull back whatever this member already saved (previous session
+  // or earlier this week) and prefill the fields, so the progress bar and
+  // "X/N logged" counts are correct immediately, not just after a fresh
+  // submit. Uses the same session/table setup as the submit handler below.
+  (async function loadSavedProgress() {
+    try {
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js');
+      const supabase = createClient(
+        'https://yabclxadadynmprymcns.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
+      );
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return; // not logged in yet — nothing to prefill
+      const memberId = session.user.id;
+
+      const { data: setRows, error: setErr } = await supabase
+        .from('workout_set_feedback')
+        .select('day_index, exercise, set_number, weight_kg, reps_used')
+        .eq('member_id', memberId);
+      if (setErr) throw setErr;
+
+      (setRows || []).forEach(row => {
+        const cell = document.querySelector(
+          '.set-cell[data-day-index="' + row.day_index + '"][data-exercise="' + CSS.escape(row.exercise) + '"][data-set-number="' + row.set_number + '"]'
+        );
+        if (!cell) return;
+        const weightInput = cell.querySelector('.weight-input');
+        const repsInput = cell.querySelector('.reps-input');
+        if (weightInput && row.weight_kg !== null && row.weight_kg !== undefined) weightInput.value = row.weight_kg;
+        if (repsInput && row.reps_used !== null && row.reps_used !== undefined) repsInput.value = row.reps_used;
+      });
+
+      const { data: exRows, error: exErr } = await supabase
+        .from('workout_exercise_feedback')
+        .select('day_index, exercise, difficulty, notes')
+        .eq('member_id', memberId);
+      if (exErr) throw exErr;
+
+      (exRows || []).forEach(row => {
+        document.querySelectorAll('.ex-row').forEach(exRow => {
+          const anyCell = exRow.querySelector('.set-cell[data-day-index="' + row.day_index + '"][data-exercise="' + CSS.escape(row.exercise) + '"]');
+          if (!anyCell) return;
+          if (row.difficulty) {
+            const starsEl = exRow.querySelector('.ex-stars');
+            if (starsEl) {
+              starsEl.dataset.rating = row.difficulty;
+              starsEl.querySelectorAll('.star').forEach(s => {
+                s.classList.toggle('filled', parseInt(s.dataset.value, 10) <= row.difficulty);
+              });
+            }
+          }
+          const notesEl = exRow.querySelector('.exercise-notes');
+          if (notesEl && row.notes) notesEl.value = row.notes;
+        });
+      });
+
+      document.querySelectorAll('.ex-row').forEach(refreshExerciseStatus);
+    } catch (err) {
+      console.warn('Could not load saved progress:', err.message || err);
+    } finally {
+      // Always (re)compute so the bar is correct even if there was nothing
+      // to load, or the load failed partway through.
+      computeAndRenderProgress();
+    }
+  })();
 
   btn.addEventListener('click', async () => {
     // Set-level rows: just weight + reps, one row per set actually filled in.
@@ -966,27 +1069,32 @@ document.querySelectorAll('.ex-stars').forEach(group => {
 })();
 
 // Day-strip: mouse-drag horizontal scrolling (touch already scrolls natively)
+// NOTE: this used to call setPointerCapture() on the strip on every mousedown,
+// which on desktop browsers can suppress/retarget the synthetic click that
+// should fire on the actual .dt child — that's why weekday taps worked on
+// mobile (pointerType 'touch' was excluded from this whole block) but not
+// with a mouse on desktop. Switched to plain mouse events with no pointer
+// capture so real clicks are never intercepted.
 (function () {
   const strip = document.getElementById('dayStrip');
   if (!strip) return;
   let isDown = false, startX = 0, startScroll = 0, moved = false;
-  strip.addEventListener('pointerdown', e => {
-    if (e.pointerType === 'touch') return;
+  strip.addEventListener('mousedown', e => {
     isDown = true; moved = false;
     startX = e.clientX; startScroll = strip.scrollLeft;
-    strip.setPointerCapture(e.pointerId);
   });
-  strip.addEventListener('pointermove', e => {
+  document.addEventListener('mousemove', e => {
     if (!isDown) return;
     const dx = e.clientX - startX;
     if (Math.abs(dx) > 4) moved = true;
     strip.scrollLeft = startScroll - dx;
   });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
-    strip.addEventListener(evt, () => { isDown = false; });
-  });
-  // Suppress the click-to-select a day if the pointer actually dragged
-  strip.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  document.addEventListener('mouseup', () => { isDown = false; });
+  // Suppress the click-to-select a day only if the mouse actually dragged
+  strip.addEventListener('click', e => {
+    if (moved) { e.stopPropagation(); e.preventDefault(); }
+    moved = false;
+  }, true);
 })();
 
 // Cursor spotlight (desktop only, respects reduced-motion)
