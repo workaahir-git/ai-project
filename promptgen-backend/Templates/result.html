@@ -129,9 +129,17 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
   padding:0 22px;border-bottom:1px solid var(--border);position:sticky;top:0;
   background:rgba(10,7,20,.72);backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);z-index:100;
 }
-.hamburger{display:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--border-hi);background:var(--bg2);color:var(--text);align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s}
+.hamburger{
+  display:none;position:fixed;top:14px;left:14px;width:38px;height:38px;border-radius:10px;
+  border:1px solid var(--border-hi);background:var(--bg2);color:var(--text);align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;
+  z-index:310; /* above .sidebar(300) and .sb-overlay(290) so it's never covered by the drawer */
+}
 .hamburger:hover{background:var(--bg3);transform:scale(1.05)}
-.hamburger svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.hamburger svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;position:absolute;transition:opacity .18s,transform .18s var(--ease)}
+.hamburger .ic-close{opacity:0;transform:rotate(-45deg) scale(.6)}
+.hamburger[aria-expanded="true"] .ic-burger{opacity:0;transform:rotate(45deg) scale(.6)}
+.hamburger[aria-expanded="true"] .ic-close{opacity:1;transform:rotate(0) scale(1)}
 
 .tb-goal{display:flex;flex-direction:column;gap:1px;white-space:nowrap}
 .tb-goal-label{font-size:10px;font-weight:700;color:var(--lime2);letter-spacing:1.5px;text-transform:uppercase}
@@ -193,34 +201,16 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .card:hover{border-color:var(--border-hi);box-shadow:0 20px 44px -28px #000d}
 .card-title{font-size:11px;font-weight:700;color:var(--lime2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
 
-/* ── DAY CARDS (workout) ── */
-.days-grid{display:grid;grid-template-columns:1fr;gap:10px}
-.day-card{background:var(--glass);backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);
-  border:1px solid var(--border);border-radius:18px;overflow:hidden;cursor:pointer;position:relative;
-  transition:border-color .25s,box-shadow .25s,transform .25s var(--ease)}
-.day-card:not(.rest-day):hover{transform:translateY(-3px);box-shadow:0 18px 38px -22px #000e}
-.day-card.open{border-color:var(--lime-dim);box-shadow:0 0 0 1px #a855f755,0 20px 44px -24px #7c3aed55}
-.day-card.today-card{border-color:#a855f766;box-shadow:0 0 0 1px #a855f733,0 0 22px -6px #a855f744}
-.day-card.today-card::before{content:"Today";position:absolute;top:-1px;right:16px;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#fff;background:linear-gradient(100deg,#7c3aed,#a855f7);padding:3px 9px;border-radius:0 0 8px 8px;box-shadow:0 4px 12px -4px #7c3aed99}
-.day-card.rest-day{opacity:.6}
-.day-header{display:flex;align-items:center;gap:12px;padding:15px 18px}
-.day-dot{width:36px;height:36px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;transition:all .25s var(--ease)}
-.day-card.open .day-dot{background:var(--lime-glow);border-color:var(--lime);color:var(--lime2);box-shadow:0 0 16px -4px #a855f799}
-.day-card.rest-day .day-dot{opacity:.4}
-.day-meta{flex:1;min-width:0}
-.day-name{font-size:14.5px;font-weight:700;color:#fff;margin-bottom:2px}
-.day-type{font-size:11.5px;color:var(--muted);font-weight:500}
-.day-card.open .day-name{color:var(--lime2)}
-.day-toggle{font-size:18px;color:var(--dim);transition:transform .25s var(--ease),color .2s;flex-shrink:0}
-.day-card.open .day-toggle{transform:rotate(45deg);color:var(--lime2)}
-/* Grid-row height animation: no JS scrollHeight math, no measurement drift,
-   no jump when fonts/content change size. 0fr<->1fr is the modern
-   accordion technique and stays in sync with content automatically. */
-.day-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--ease)}
-.day-card.open .day-body{grid-template-rows:1fr}
-.day-body-inner{overflow:hidden;min-height:0}
-.day-body-content{padding:0 18px 18px;opacity:0;transition:opacity .3s var(--ease) .05s}
-.day-card.open .day-body-content{opacity:1}
+/* ── WORKOUT DAY PANEL (single day shown at a time, driven by the top day-strip) ── */
+.day-panel{display:none}
+.day-panel.active{display:block;animation:fadeIn .3s var(--ease)}
+.day-panel-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.day-panel-title{font-size:clamp(19px,3vw,22px);font-weight:800;color:#fff}
+.day-panel-sub{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px}
+.rest-panel{background:var(--glass);backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);border:1px solid var(--border);border-radius:18px;padding:36px 20px;text-align:center}
+.rest-panel-icon{font-size:32px;margin-bottom:10px}
+.rest-panel-title{font-size:16px;font-weight:700;color:#eee;margin-bottom:6px}
+.rest-panel-sub{color:var(--muted);font-size:13px;line-height:1.6}
 
 .warmup-pill{display:inline-block;background:var(--bg3);border:1px solid var(--border-hi);border-radius:8px;padding:9px 13px;font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;width:100%}
 .warmup-pill strong{color:#bbb;font-weight:600}
@@ -369,7 +359,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
   .sidebar.collapsed .sb-label,.sidebar.collapsed .sb-brand span,.sidebar.collapsed .sb-progress-wrap,
   .sidebar.collapsed .sb-collapse-btn span{display:block}
   .sidebar .sb-collapse-btn{display:none}
-  .topbar{padding:0 14px;gap:10px}
+  .topbar{padding:0 14px 0 62px;gap:10px}
   .tb-goal-title{font-size:13.5px}
   .tb-username{display:none}
   .tb-stars{display:none}
@@ -400,6 +390,16 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 <div class="app-shell">
 
   <div class="sb-overlay" id="sbOverlay"></div>
+
+  <!-- Mobile nav toggle lives OUTSIDE the topbar on purpose: the topbar is a
+       lower stacking context than the sidebar drawer, so a hamburger nested
+       inside it gets physically covered by the drawer once it slides open
+       and becomes untappable. As a fixed sibling of the sidebar it always
+       stays on top and clickable, whether the drawer is open or closed. -->
+  <button class="hamburger" id="hamburgerBtn" aria-label="Open navigation menu" aria-expanded="false">
+    <svg class="ic-burger" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <svg class="ic-close" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+  </button>
 
   <!-- ══════════ SIDEBAR ══════════ -->
   <aside class="sidebar" id="sidebar">
@@ -443,9 +443,6 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
   <div class="main">
 
     <div class="topbar">
-      <button class="hamburger" id="hamburgerBtn" aria-label="Open navigation menu">
-        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
       <div class="tb-goal">
         <span class="tb-goal-label">{{ plan.goal_label }}</span>
         <span class="tb-goal-title">Overall Progress</span>
@@ -527,99 +524,84 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 
       <!-- ══════════ WORKOUT (with sets / weight / difficulty) ══════════ -->
       <div class="section" id="sec-workout">
-        <div class="sec-label">Tap a day to expand</div>
-
-        <div class="days-grid" id="daysGrid">
+        <div class="workout-day-panels" id="workoutPanels">
           {% for day in workout.days %}
+          {% set day_idx = loop.index0 %}
           {% if day.is_rest %}
-          <div class="day-card rest-day" data-day-index="{{ loop.index0 }}">
-            <div class="day-header">
-              <div class="day-dot">{{ day.short }}</div>
-              <div class="day-meta">
-                <div class="day-name" style="color:var(--muted)">{{ day.name }}</div>
-                <div class="day-type">{{ day.type }}</div>
-              </div>
-              <div class="day-toggle" style="color:transparent">+</div>
+          <div class="day-panel{% if day_idx == 0 %} active{% endif %}" data-day-index="{{ day_idx }}">
+            <div class="rest-panel">
+              <div class="rest-panel-icon">🌙</div>
+              <div class="rest-panel-title">{{ day.name }}</div>
+              <div class="rest-panel-sub">{{ day.type }} — no workout scheduled, recovery day.</div>
             </div>
           </div>
           {% else %}
-          {% set day_idx = loop.index0 %}
-          <div class="day-card" data-day-index="{{ day_idx }}">
-            <div class="day-header" onclick="toggleDay(this.closest('.day-card'))">
-              <div class="day-dot">{{ day.short }}</div>
-              <div class="day-meta">
-                <div class="day-name">{{ day.name }}</div>
-                <div class="day-type">{{ day.type }}</div>
-              </div>
-              <div class="day-toggle">+</div>
+          <div class="day-panel{% if day_idx == 0 %} active{% endif %}" data-day-index="{{ day_idx }}">
+            <div class="day-panel-header">
+              <div class="day-panel-title">{{ day.name }}</div>
+              <div class="day-panel-sub">{{ day.type }}</div>
             </div>
-            <div class="day-body">
-              <div class="day-body-inner">
-                <div class="day-body-content">
-                  <div class="warmup-pill"><strong>Warmup:</strong> {{ day.warmup_exercises | join(' · ') }}</div>
-                  {% for ex in day.exercises %}
-                  {% set ex_idx = loop.index0 %}
-                  <div class="ex-row">
-                    <div class="ex-head" role="button" tabindex="0" aria-expanded="false"
-                         onclick="toggleExercise(this.closest('.ex-row'))"
-                         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleExercise(this.closest('.ex-row'));}">
-                      <div class="ex-head-main">
-                        <div class="ex-name">{{ ex.name }}</div>
-                        <div class="ex-muscle">{{ ex.muscle }}</div>
-                      </div>
-                      <div class="ex-meta-right">
-                        <span class="ex-sets-total">{{ ex.sets }} × {{ ex.reps }}</span>
-                        <span class="ex-status" data-ex-status>0/{{ ex.sets }} logged</span>
-                        <span class="ex-chevron" aria-hidden="true">
-                          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-                        </span>
-                      </div>
-                    </div>
-                    <div class="ex-body">
-                      <div class="ex-body-inner">
-                        <div class="ex-body-content">
-                          <div class="set-grid">
-                            {% for i in range(ex.sets) %}
-                            <div class="set-cell"
-                                 data-day-index="{{ day_idx }}"
-                                 data-day-name="{{ day.name }}"
-                                 data-exercise="{{ ex.name }}"
-                                 data-set-number="{{ i + 1 }}">
-                              <div class="set-cell-label">Set {{ i + 1 }}</div>
-                              <div class="set-field-row">
-                                <label>Kg</label>
-                                <input type="number" inputmode="decimal" step="0.5" min="0" class="weight-input" placeholder="0" oninput="updateExerciseStatus(this)">
-                              </div>
-                              <div class="set-field-row">
-                                <label>Reps</label>
-                                <input type="text" inputmode="numeric" class="reps-input" placeholder="{{ ex.reps }}" oninput="updateExerciseStatus(this)">
-                              </div>
-                              <div class="set-field-row">
-                                <label>RPE</label>
-                                <input type="number" inputmode="decimal" step="0.5" min="1" max="10" class="rpe-input" placeholder="–" oninput="updateExerciseStatus(this)">
-                              </div>
-                              <div class="set-stars-row">
-                                <span class="set-cell-hint">Difficulty</span>
-                                <div class="set-stars" data-rating="0">
-                                  {% for s in range(5) %}<span class="star" data-value="{{ s + 1 }}">★</span>{% endfor %}
-                                </div>
-                              </div>
-                            </div>
-                            {% endfor %}
-                          </div>
-                          <div class="ex-notes">
-                            <label for="notes-{{ day_idx }}-{{ ex_idx }}">Notes / comments</label>
-                            <textarea id="notes-{{ day_idx }}-{{ ex_idx }}" class="exercise-notes" placeholder="Optional — form cues, pain, how it felt…"></textarea>
+            <div class="warmup-pill"><strong>Warmup:</strong> {{ day.warmup_exercises | join(' · ') }}</div>
+            {% for ex in day.exercises %}
+            {% set ex_idx = loop.index0 %}
+            <div class="ex-row">
+              <div class="ex-head" role="button" tabindex="0" aria-expanded="false"
+                   onclick="toggleExercise(this.closest('.ex-row'))"
+                   onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleExercise(this.closest('.ex-row'));}">
+                <div class="ex-head-main">
+                  <div class="ex-name">{{ ex.name }}</div>
+                  <div class="ex-muscle">{{ ex.muscle }}</div>
+                </div>
+                <div class="ex-meta-right">
+                  <span class="ex-sets-total">{{ ex.sets }} × {{ ex.reps }}</span>
+                  <span class="ex-status" data-ex-status>0/{{ ex.sets }} logged</span>
+                  <span class="ex-chevron" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                  </span>
+                </div>
+              </div>
+              <div class="ex-body">
+                <div class="ex-body-inner">
+                  <div class="ex-body-content">
+                    <div class="set-grid">
+                      {% for i in range(ex.sets) %}
+                      <div class="set-cell"
+                           data-day-index="{{ day_idx }}"
+                           data-day-name="{{ day.name }}"
+                           data-exercise="{{ ex.name }}"
+                           data-set-number="{{ i + 1 }}">
+                        <div class="set-cell-label">Set {{ i + 1 }}</div>
+                        <div class="set-field-row">
+                          <label>Kg</label>
+                          <input type="number" inputmode="decimal" step="0.5" min="0" class="weight-input" placeholder="0" oninput="updateExerciseStatus(this)">
+                        </div>
+                        <div class="set-field-row">
+                          <label>Reps</label>
+                          <input type="text" inputmode="numeric" class="reps-input" placeholder="{{ ex.reps }}" oninput="updateExerciseStatus(this)">
+                        </div>
+                        <div class="set-field-row">
+                          <label>RPE</label>
+                          <input type="number" inputmode="decimal" step="0.5" min="1" max="10" class="rpe-input" placeholder="–" oninput="updateExerciseStatus(this)">
+                        </div>
+                        <div class="set-stars-row">
+                          <span class="set-cell-hint">Difficulty</span>
+                          <div class="set-stars" data-rating="0">
+                            {% for s in range(5) %}<span class="star" data-value="{{ s + 1 }}">★</span>{% endfor %}
                           </div>
                         </div>
                       </div>
+                      {% endfor %}
+                    </div>
+                    <div class="ex-notes">
+                      <label for="notes-{{ day_idx }}-{{ ex_idx }}">Notes / comments</label>
+                      <textarea id="notes-{{ day_idx }}-{{ ex_idx }}" class="exercise-notes" placeholder="Optional — form cues, pain, how it felt…"></textarea>
                     </div>
                   </div>
-                  {% endfor %}
-                  <div class="safety-note"><strong>Safety:</strong> {{ day.safety }}</div>
                 </div>
               </div>
             </div>
+            {% endfor %}
+            <div class="safety-note"><strong>Safety:</strong> {{ day.safety }}</div>
           </div>
           {% endif %}
           {% endfor %}
@@ -776,11 +758,18 @@ document.getElementById('mealTabs').addEventListener('click', e => {
   document.getElementById('meal-' + tab.dataset.meal).classList.add('active');
 });
 
-/* ══════════ DAY STRIP ⇄ WORKOUT ACCORDION — single source of truth ══════════
-   Both the top day-strip and the accordion below read/write through this one
-   function, so they can never drift out of sync in either direction. */
-function highlightDayStrip(idx, opts) {
+/* ══════════ DAY STRIP ⇄ WORKOUT DAY PANEL — single source of truth ══════════
+   Clicking a day box in the top strip shows ONLY that day's workout panel below
+   (everything else is hidden, not just collapsed) — and highlights the matching
+   box. Both directions always go through this one function so they can't drift
+   out of sync. */
+function selectDay(idx, opts) {
   opts = opts || {};
+  const panel = document.querySelector('.day-panel[data-day-index="' + idx + '"]');
+  if (!panel) return;
+
+  document.querySelectorAll('.day-panel').forEach(p => p.classList.toggle('active', p === panel));
+
   document.querySelectorAll('.dt').forEach(d => {
     d.classList.toggle('active', d.dataset.dayIndex === String(idx));
   });
@@ -789,15 +778,6 @@ function highlightDayStrip(idx, opts) {
     if (activeDt) activeDt.scrollIntoView({ behavior: opts.smooth === false ? 'auto' : 'smooth', inline: 'center', block: 'nearest' });
   }
 }
-function openDayCard(idx, opts) {
-  opts = opts || {};
-  const card = document.querySelector('.day-card[data-day-index="' + idx + '"]');
-  if (!card || card.classList.contains('rest-day')) return;
-  document.querySelectorAll('.day-card.open').forEach(c => { if (c !== card) c.classList.remove('open'); });
-  card.classList.add('open');
-  highlightDayStrip(idx, { smooth: opts.smooth });
-  if (opts.scrollToCard) card.scrollIntoView({ block: 'center', behavior: opts.smooth === false ? 'auto' : 'smooth' });
-}
 function goToWorkoutTab() {
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
   document.querySelector('.sb-item[data-sec="workout"]').classList.add('active');
@@ -805,13 +785,12 @@ function goToWorkoutTab() {
   document.getElementById('sec-workout').classList.add('active');
 }
 
-// Top day-strip → jump to Workout tab, open + center that day
+// Top day-strip → jump to Workout tab and show only that day's panel
 document.getElementById('dayStrip').addEventListener('click', e => {
   const dt = e.target.closest('.dt');
   if (!dt) return;
-  const idx = dt.dataset.dayIndex;
   goToWorkoutTab();
-  openDayCard(idx, { scrollToCard: true });
+  selectDay(dt.dataset.dayIndex);
 });
 
 // Mouse-wheel: let vertical wheel scroll the day-strip horizontally (touch already
@@ -825,19 +804,6 @@ document.getElementById('dayStrip').addEventListener('click', e => {
     strip.scrollLeft += e.deltaY;
   }, { passive: false });
 })();
-
-// Accordion below: click a day-card header → toggle it open/closed, and keep
-// the top day-strip's active state (and centering) synced to whichever day is open.
-function toggleDay(card) {
-  if (card.classList.contains('rest-day')) return;
-  const idx = card.dataset.dayIndex;
-  const isOpen = card.classList.contains('open');
-  if (isOpen) {
-    card.classList.remove('open');
-  } else {
-    openDayCard(idx, { scrollToCard: false });
-  }
-}
 
 // ── Exercise rows: independent expand/collapse (multiple can be open) ──
 function toggleExercise(row) {
@@ -970,19 +936,13 @@ document.querySelectorAll('.set-stars').forEach(group => {
 
 // ══════════ PREMIUM POLISH (additive — does not alter any logic above) ══════════
 
-// Auto-expand today's workout (mirrors the day-strip's own "active" convention, no backend change needed)
+// Defensive sync on load: the day-strip and the workout day-panel are both
+// server-rendered with the same "today" index active already, but this keeps
+// them from ever drifting if that assumption changes.
 (function () {
-  const grid = document.getElementById('daysGrid');
-  if (!grid) return;
   const activeDt = document.querySelector('.dt.active');
   const idx = activeDt ? activeDt.dataset.dayIndex : '0';
-  const card = grid.querySelector('.day-card[data-day-index="' + idx + '"]');
-  if (!card) return;
-  card.classList.add('today-card');
-  if (!card.classList.contains('rest-day')) {
-    // No scroll/centering on initial load — just open it and mark the strip in sync.
-    openDayCard(idx, { smooth: false, scrollToCard: false });
-  }
+  selectDay(idx, { smooth: false });
 })();
 
 // Day-strip: mouse-drag horizontal scrolling (touch already scrolls natively)
