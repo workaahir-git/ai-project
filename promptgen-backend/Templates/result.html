@@ -98,6 +98,10 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;
 .sb-progress-day{font-size:20px;font-weight:800;color:#fff;margin-bottom:8px}
 .sb-progress-track{height:6px;background:var(--bg4);border-radius:4px;overflow:hidden;position:relative}
 .sb-progress-fill{height:100%;background:linear-gradient(90deg,#a855f7,#6366f1);border-radius:4px;position:relative;overflow:hidden}
+.sb-progress-fill.pf-over{background:linear-gradient(90deg,#22c55e,#16a34a)}
+.sb-progress-fill.pf-under{background:linear-gradient(90deg,#f97316,#ef4444)}
+.sb-progress-fill.pf-fatigue{background:linear-gradient(90deg,#ef4444,#b91c1c)}
+.sb-progress-frac.pf-fatigue-text{color:#f87171;font-weight:700}
 .sb-progress-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent,#ffffff55,transparent);animation:shimmer 2.2s ease-in-out infinite}
 @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .sb-progress-frac{font-size:10px;color:var(--muted);margin-top:6px;text-align:right}
@@ -171,6 +175,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .dt-bar{height:4px;background:var(--bg4);border-radius:3px;margin-top:9px;overflow:hidden}
 .dt.active .dt-bar{background:#ffffff33}
 .dt-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width .8s var(--ease)}
+.dt-bar-fill.pf-over{background:linear-gradient(90deg,#22c55e,#16a34a)}
+.dt-bar-fill.pf-under{background:linear-gradient(90deg,#f97316,#ef4444)}
+.dt-bar-fill.pf-fatigue{background:linear-gradient(90deg,#ef4444,#b91c1c)}
 .dt.active .dt-bar-fill{background:#fff}
 .dt-rest .dt-date{color:var(--muted)}
 
@@ -337,6 +344,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .wday{width:28px;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .wbar-bg{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
 .wbar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width .8s cubic-bezier(.34,1.56,.64,1);width:0}
+.wbar.pf-over{background:linear-gradient(90deg,#22c55e,#16a34a)}
+.wbar.pf-under{background:linear-gradient(90deg,#f97316,#ef4444)}
+.wbar.pf-fatigue{background:linear-gradient(90deg,#ef4444,#b91c1c)}
 .wrest{background:var(--dim)}
 .wlabel{font-size:11px;color:var(--muted);font-weight:500;text-align:right;width:80px;flex-shrink:0}
 .wlabel.active-day{color:var(--lime2);font-weight:700}
@@ -415,9 +425,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
     </div>
 
     <div class="sb-progress-wrap">
-      <div class="sb-progress-day">This week</div>
+      <div class="sb-progress-day">Reps vs target</div>
       <div class="sb-progress-track"><div class="sb-progress-fill" id="sbProgressFill" style="width:0%"></div></div>
-      <div class="sb-progress-frac" id="sbProgressFrac">0 / 0 sets logged</div>
+      <div class="sb-progress-frac" id="sbProgressFrac">No reps logged yet</div>
     </div>
 
     <nav class="sb-nav" aria-label="Dashboard sections">
@@ -506,7 +516,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
         <div class="sec-label">Weekly split</div>
         <div class="card">
           {% for day in workout.days %}
-          <div class="week-row">
+          <div class="week-row" data-day-index="{{ loop.index0 }}">
             <div class="wday">{{ day.short }}</div>
             <div class="wbar-bg">
               <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="width:{{ day.bar_width }}%"></div>
@@ -575,7 +585,8 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
                            data-day-index="{{ day_idx }}"
                            data-day-name="{{ day.name }}"
                            data-exercise="{{ ex.name }}"
-                           data-set-number="{{ i + 1 }}">
+                           data-set-number="{{ i + 1 }}"
+                           data-recommended-reps="{{ ex.reps }}">
                         <div class="set-cell-label">Set {{ i + 1 }}</div>
                         <div class="set-field-row">
                           <label>Kg</label>
@@ -835,40 +846,112 @@ function refreshExerciseStatus(row) {
   statusEl.classList.toggle('done', cells.length > 0 && logged === cells.length);
 }
 
-// Overall progress: sidebar bar = every set across the whole plan that has a
-// weight or reps value entered; each day-strip pill's own bar = just that
-// day's sets. Recalculated on every keystroke in a weight/reps field (via
-// updateExerciseStatus above) and once on load after any saved data is
-// pulled in from Supabase, so it always reflects what's actually been logged.
+// Parses a recommended/actual reps value into a comparable number.
+// Handles plain numbers ("10"), ranges ("8-12", "8–12", "8 to 12" — averaged),
+// and non-numeric targets like "AMRAP" or "failure" (returns null — those
+// can't be compared against a number, so they're excluded from the ratio).
+function parseReps(val) {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  if (s === '') return null;
+  const range = s.match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)/i);
+  if (range) return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
+  const single = s.match(/(\d+(?:\.\d+)?)/);
+  return single ? parseFloat(single[1]) : null;
+}
+
+// Overall progress: for every set with an actual reps value entered AND a
+// numeric recommended-reps target, sum both sides and compare — this shows
+// whether the user is under or over the plan's target, not just "did they
+// type something in". Sidebar bar = whole plan; each day-strip pill's own
+// bar = just that day. Recalculated on every keystroke in a reps field (via
+// updateExerciseStatus above) and once on load after saved data is pulled
+// in from Supabase.
 function computeAndRenderProgress() {
   const perDay = {};
-  let totalAll = 0, loggedAll = 0;
+  let recAll = 0, actAll = 0, anyAll = false;
 
   document.querySelectorAll('.set-cell').forEach(cell => {
-    const weight = cell.querySelector('.weight-input');
-    const reps = cell.querySelector('.reps-input');
-    const touched = (weight && weight.value !== '') || (reps && reps.value !== '');
+    const repsInput = cell.querySelector('.reps-input');
+    const actual = repsInput ? parseReps(repsInput.value) : null;
+    const recommended = parseReps(cell.dataset.recommendedReps);
+    if (actual === null || recommended === null || recommended <= 0) return;
+
     const di = cell.dataset.dayIndex;
-    if (!perDay[di]) perDay[di] = { total: 0, logged: 0 };
-    perDay[di].total++;
-    totalAll++;
-    if (touched) { perDay[di].logged++; loggedAll++; }
+    if (!perDay[di]) perDay[di] = { rec: 0, act: 0, any: false };
+    perDay[di].rec += recommended;
+    perDay[di].act += actual;
+    perDay[di].any = true;
+    recAll += recommended;
+    actAll += actual;
+    anyAll = true;
   });
 
-  const fill = document.getElementById('sbProgressFill');
-  const frac = document.getElementById('sbProgressFrac');
-  const pctAll = totalAll ? Math.round((loggedAll / totalAll) * 100) : 0;
-  if (fill) fill.style.width = pctAll + '%';
-  if (frac) frac.textContent = loggedAll + ' / ' + totalAll + ' sets logged';
+  renderProgressBar(
+    document.getElementById('sbProgressFill'),
+    document.getElementById('sbProgressFrac'),
+    recAll, actAll, anyAll
+  );
 
   document.querySelectorAll('.dt').forEach(dt => {
     const barFill = dt.querySelector('.dt-bar-fill');
     if (!barFill) return;
     if (dt.classList.contains('dt-rest')) { barFill.style.width = '0%'; return; }
     const stats = perDay[dt.dataset.dayIndex];
-    const pct = stats && stats.total ? Math.round((stats.logged / stats.total) * 100) : 0;
-    barFill.style.width = pct + '%';
+    renderProgressBar(barFill, null, stats ? stats.rec : 0, stats ? stats.act : 0, !!(stats && stats.any));
   });
+
+  // Overview → "Weekly split" bars: same per-day reps-vs-target data, just
+  // rendered next to each day-of-week row instead of the day-strip pill.
+  // Rest days keep their original server-rendered bar (there's nothing to
+  // log against on a rest day) and are left alone.
+  document.querySelectorAll('.week-row').forEach(row => {
+    const bar = row.querySelector('.wbar');
+    if (!bar || bar.classList.contains('wrest')) return;
+    const stats = perDay[row.dataset.dayIndex];
+    renderProgressBar(bar, null, stats ? stats.rec : 0, stats ? stats.act : 0, !!(stats && stats.any));
+  });
+}
+
+// Run once immediately so every progress bar (sidebar, day-strip, and the
+// Overview weekly-split rows) starts from the real reps-vs-target state
+// rather than the server's placeholder width, before the async Supabase
+// load below (or the entrance animations further down) get a chance to run.
+computeAndRenderProgress();
+
+// Shared renderer for both the sidebar bar and each day-strip pill's bar.
+// Bar visually caps at 100% width (so overachieving doesn't overflow the
+// track), but the percentage in the label keeps going past 100 so the
+// number itself communicates "how much" over/under target. Past 150% the
+// bar and label flip to a fatigue warning — that much beyond the
+// prescribed reps is more likely overtraining/bad rep-counting than a
+// genuine strength gain, worth flagging rather than just praising.
+function renderProgressBar(fillEl, fracEl, recommended, actual, hasData) {
+  if (!fillEl) return;
+  fillEl.classList.remove('pf-over', 'pf-under', 'pf-fatigue');
+  if (fracEl) fracEl.classList.remove('pf-fatigue-text');
+  if (!hasData || recommended <= 0) {
+    fillEl.style.width = '0%';
+    if (fracEl) fracEl.textContent = 'No reps logged yet';
+    return;
+  }
+  const pct = Math.round((actual / recommended) * 100);
+  fillEl.style.width = Math.min(pct, 100) + '%';
+  if (pct > 150) fillEl.classList.add('pf-fatigue');
+  else if (pct >= 100) fillEl.classList.add('pf-over');
+  else if (pct < 80) fillEl.classList.add('pf-under');
+  if (fracEl) {
+    if (pct > 150) {
+      fracEl.textContent = '⚠ ' + pct + '% of target reps — fatigue risk, consider adding weight instead';
+      fracEl.classList.add('pf-fatigue-text');
+    } else if (pct > 100) {
+      fracEl.textContent = pct + '% of target reps — overachieving';
+    } else if (pct >= 90) {
+      fracEl.textContent = pct + '% of target reps — on track';
+    } else {
+      fracEl.textContent = pct + '% of target reps — below target';
+    }
+  }
 }
 
 // ── Interactive difficulty stars (one rating per exercise, not per set) ──
@@ -1108,11 +1191,14 @@ document.querySelectorAll('.ex-stars').forEach(group => {
   }, { passive: true });
 })();
 
-// Animate weekly split bars + count up stat numbers on first paint
+// Animate weekly split bars + count up stat numbers on first paint.
+// Only the rest-day bars (.wrest) still use this — the workout-day bars are
+// now driven live by computeAndRenderProgress() based on actual reps logged,
+// so animating them from a stale server-rendered width here would fight that.
 (function () {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   requestAnimationFrame(() => {
-    document.querySelectorAll('.wbar').forEach(bar => {
+    document.querySelectorAll('.wbar.wrest').forEach(bar => {
       const target = bar.style.width;
       if (!target) return;
       if (prefersReduced) return;

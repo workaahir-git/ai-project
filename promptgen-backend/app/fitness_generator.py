@@ -621,13 +621,10 @@ def _render_day_plan_table(
 
 
 # ── DETERMINISTIC EXERCISE SELECTION (Python owns this, not the LLM) ─────────
-# Reps stay fixed by slot type; sets/rest come from the same experience-tier
-# volume table used everywhere else, so nothing here re-derives numbers that
-# were already formula-driven.
-_REP_RANGE_BY_SLOT = {
-    "compound":  "8–10 reps",
-    "isolation": "12–15 reps",
-}
+# Reps now come from the same goal-based table as sets/rest (2_Programming_Rules.md
+# §1), so a fat-loss client actually gets a higher-rep/lighter-weight prescription
+# (8–15) and a muscle-gain client gets fewer/heavier reps (6–12) instead of every
+# goal seeing the same fixed 8–10 / 12–15 split by slot type.
 
 _SAFETY_DEFAULT_BY_TOKEN = {
     "push":  "Keep shoulder blades back and down, controlled tempo on every rep — stop a set short of failure if form breaks down.",
@@ -696,7 +693,7 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
                 "name": p["name"],
                 "muscle": p["muscle"].title(),
                 "sets": goal_prescription["sets_per_exercise"],
-                "reps": _REP_RANGE_BY_SLOT[p["slot"]],
+                "reps": goal_prescription["reps"] + " reps",
                 "rest": goal_prescription["rest"],
                 "tempo_or_cue": p["cue"],
             })
