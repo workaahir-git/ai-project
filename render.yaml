@@ -12,6 +12,10 @@ services:
         sync: false
       - key: SUPABASE_JWT_SECRET
         sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DEMO_GYM_ID
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: FRONTEND_ORIGIN
