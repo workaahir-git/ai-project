@@ -126,19 +126,103 @@ RIR_BY_TRAINING_AGE = {
 # ── 3. SESSION DURATION CAPS (doc 1, §4) ────────────────────────────────────
 # Caps the TOTAL number of exercises in one session so a plan never
 # recommends more work than the client's stated session length can hold.
-# Values are the upper bound of each row's exercise-count guidance.
-def session_duration_cap(minutes: int) -> int:
-    if minutes <= 20:
-        return 3    # 1 compound + 1 accessory per pattern, supersetted
+#
+# STEP 3 (Workout Duration Enforcement): instead of a hand-guessed bucket
+# table, the cap is DERIVED from an actual time budget — warm-up +
+# (transition + sets * (work + rest)) per exercise — so a 47-minute session
+# isn't silently treated the same as a 60-minute one, and the modeled
+# workout is mathematically guaranteed to fit inside `minutes` * 1.10.
+import re
+
+# Time (seconds) a single working set takes, excluding rest — unrack/setup,
+# the rep itself, re-rack. Compounds take a little longer than isolations
+# because of heavier loading/setup; a day plan mixes both, so we use their
+# midpoint as the per-set constant.
+_COMPOUND_SET_SECONDS = 45
+_ISOLATION_SET_SECONDS = 30
+_AVG_SET_SECONDS = (_COMPOUND_SET_SECONDS + _ISOLATION_SET_SECONDS) / 2  # 37.5s
+
+# Time (seconds) to move from one exercise to the next — walk to the next
+# station, adjust the bench/rack, change plates.
+_TRANSITION_SECONDS = 45
+
+# Max overrun allowed vs. the client's selected duration (doc requirement:
+# "never exceed the selected duration by more than approximately 10%").
+_MAX_OVERRUN = 1.10
+
+
+def _warmup_minutes(minutes: int) -> float:
+    """
+    Warm-up scales with session length — a 20-minute session can't afford
+    a 10-minute warm-up, but a 90-minute session should get a real one
+    (general movement prep + specific ramp-up sets).
+    """
     if minutes <= 30:
-        return 4    # 2 compound + 1-2 accessories
+        return 5.0
     if minutes <= 45:
-        return 5    # standard minimalist session
+        return 7.0
     if minutes <= 60:
-        return 7    # standard full session, 5-6 exercises (+1 buffer for arm floor)
+        return 8.0
     if minutes <= 90:
-        return 9    # full session + extra accessory/isolation/intensity work
-    return 11       # 120 min, advanced/powerlifting peaking only
+        return 10.0
+    return 12.0
+
+
+def _rest_seconds_for_goal(goal: str | None) -> float:
+    """
+    Parses the midpoint rest time (in seconds) out of SETS_REPS_BY_GOAL's
+    "rest" string for the given goal (e.g. "60–120s" -> 90, "3–5 min" ->
+    240). Only the FIRST numeric range in the string is used — goals with
+    a split rest scheme (e.g. athletic's power vs. accessory work) still
+    only need one representative number here since this feeds a session-
+    wide exercise-count cap, not per-exercise timing.
+    """
+    rest_str = sets_reps_rest_for_goal(goal or "").get("rest", "60–90s")
+    match = re.search(r"(\d+)\s*[–\-]\s*(\d+)\s*(s|min)", rest_str)
+    if not match:
+        return 75.0  # sane fallback: midpoint of the most common 60-90s range
+    low, high, unit = int(match.group(1)), int(match.group(2)), match.group(3)
+    seconds = (low + high) / 2
+    return seconds * 60 if unit == "min" else seconds
+
+
+def estimate_session_minutes(total_exercises: int, minutes: int, goal: str | None = None) -> float:
+    """
+    Given a candidate exercise count, returns the realistic total workout
+    time (warm-up + all exercises' sets/rest/transitions) in minutes. Used
+    both by session_duration_cap() to solve for the cap, and available
+    directly so callers/tests can sanity-check "does this plan actually
+    fit the selected duration".
+    """
+    if total_exercises <= 0:
+        return _warmup_minutes(minutes)
+    sets_per_ex = sets_reps_rest_for_goal(goal or "")["sets_per_exercise"]
+    rest_seconds = _rest_seconds_for_goal(goal)
+    per_exercise_seconds = _TRANSITION_SECONDS + sets_per_ex * (_AVG_SET_SECONDS + rest_seconds)
+    return _warmup_minutes(minutes) + (total_exercises * per_exercise_seconds) / 60.0
+
+
+def session_duration_cap(minutes: int, goal: str | None = None) -> int:
+    """
+    Max total exercise count (compound + isolation combined) that
+    realistically fits inside `minutes`, including warm-up, per-set rest,
+    and transition time between exercises. Guaranteed to keep the modeled
+    workout at or under `minutes * 1.10`.
+
+    `goal` is optional so existing callers that only ever passed `minutes`
+    keep working — it falls back to the "muscle_gain" rest/set profile,
+    which is the middle-of-the-road case (4 sets, 60-120s rest).
+    """
+    if not minutes or minutes <= 0:
+        minutes = 45
+    budget_minutes = minutes * _MAX_OVERRUN - _warmup_minutes(minutes)
+    if budget_minutes <= 0:
+        return 1
+    sets_per_ex = sets_reps_rest_for_goal(goal or "")["sets_per_exercise"]
+    rest_seconds = _rest_seconds_for_goal(goal)
+    per_exercise_seconds = _TRANSITION_SECONDS + sets_per_ex * (_AVG_SET_SECONDS + rest_seconds)
+    cap = int((budget_minutes * 60) // per_exercise_seconds)
+    return max(cap, 1)
 
 
 # ── 4. SPLIT DECISION TREE (doc 1, §2) ──────────────────────────────────────

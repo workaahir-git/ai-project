@@ -1,13 +1,6 @@
 [
   {
     "_injury_safety_note": "Some exercises were excluded or reduced today because you flagged: knee. If this is inaccurate, update your intake notes; if the area is still symptomatic, check with a coach or doctor before pushing load through it.",
-    "_validation": {
-      "rejected": [],
-      "repairs": [],
-      "warnings": [
-        "triceps: duplicate 'elbow_extension' pattern on Machine Triceps Dip \u2014 no alternative pattern available in pool, kept as-is"
-      ]
-    },
     "exercises": [
       {
         "muscle": "Chest",
@@ -26,36 +19,12 @@
         "tempo_or_cue": "Controlled press, avoid locking elbows hard"
       },
       {
-        "muscle": "Chest",
-        "name": "Push-Up (feet elevated)",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Full range, controlled tempo"
-      },
-      {
-        "muscle": "Triceps",
-        "name": "Dumbbell Overhead Extension",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Controlled stretch at bottom"
-      },
-      {
         "muscle": "Triceps",
         "name": "Machine Triceps Dip",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
         "tempo_or_cue": "Controlled tempo, don't lock out hard"
-      },
-      {
-        "muscle": "Shoulders",
-        "name": "Reverse Pec Deck (rear delt)",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Squeeze rear delts, controlled tempo"
       }
     ],
     "is_rest": false,
@@ -77,27 +46,17 @@
       "rejected": [],
       "repairs": [],
       "warnings": [
-        "biceps: duplicate 'elbow_flexion' pattern on Cable Bicep Curl \u2014 no alternative pattern available in pool, kept as-is",
-        "traps: duplicate 'shrug' pattern on Band Shrug \u2014 no alternative pattern available in pool, kept as-is",
-        "traps: duplicate 'shrug' pattern on Smith Machine Shrug \u2014 no alternative pattern available in pool, kept as-is"
+        "biceps: duplicate 'elbow_flexion' pattern on Cable Bicep Curl \u2014 no alternative pattern available in pool, kept as-is"
       ]
     },
     "exercises": [
       {
         "muscle": "Back",
-        "name": "Chest-Supported Machine Row",
+        "name": "Seated Cable Row",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Full stretch, squeeze at contraction"
-      },
-      {
-        "muscle": "Back",
-        "name": "Machine Rear Delt Fly (targets upper back)",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Squeeze shoulder blades together"
+        "tempo_or_cue": "Chest up, drive elbows back"
       },
       {
         "muscle": "Biceps",
@@ -114,30 +73,6 @@
         "rest": "3\u20135 min",
         "sets": 4,
         "tempo_or_cue": "Controlled, no swinging"
-      },
-      {
-        "muscle": "Traps",
-        "name": "Dumbbell Shrug",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Straight up and down, no rolling, pause at top"
-      },
-      {
-        "muscle": "Traps",
-        "name": "Band Shrug",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Constant tension, squeeze at top"
-      },
-      {
-        "muscle": "Traps",
-        "name": "Smith Machine Shrug",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Full range, pause 1 sec at top"
       }
     ],
     "is_rest": false,
@@ -152,13 +87,6 @@
   },
   {
     "_injury_safety_note": "Some exercises were excluded or reduced today because you flagged: knee. If this is inaccurate, update your intake notes; if the area is still symptomatic, check with a coach or doctor before pushing load through it.",
-    "_validation": {
-      "rejected": [],
-      "repairs": [],
-      "warnings": [
-        "calves: duplicate 'calf_raise' pattern on Standing Calf Raise Machine \u2014 no alternative pattern available in pool, kept as-is"
-      ]
-    },
     "exercises": [
       {
         "muscle": "Legs",
@@ -170,27 +98,19 @@
       },
       {
         "muscle": "Legs",
-        "name": "Leg Press",
+        "name": "Lying Leg Curl",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Full range, don't lock knees out at top"
+        "tempo_or_cue": "Full stretch at bottom"
       },
       {
         "muscle": "Calves",
-        "name": "Bodyweight Calf Raise",
+        "name": "Seated Calf Raise",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Full range each rep, no bouncing"
-      },
-      {
-        "muscle": "Calves",
-        "name": "Standing Calf Raise Machine",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Full range, pause at top"
+        "tempo_or_cue": "Pause 1 sec at full stretch"
       }
     ],
     "is_rest": false,
@@ -208,14 +128,21 @@
   },
   {
     "_injury_safety_note": "Some exercises were excluded or reduced today because you flagged: knee. If this is inaccurate, update your intake notes; if the area is still symptomatic, check with a coach or doctor before pushing load through it.",
+    "_validation": {
+      "rejected": [],
+      "repairs": [],
+      "warnings": [
+        "chest: duplicate 'horizontal_push_isolation' pattern on Push-Up (feet elevated) \u2014 no alternative pattern available in pool, kept as-is"
+      ]
+    },
     "exercises": [
       {
         "muscle": "Back",
-        "name": "Assisted Pull-up",
+        "name": "Lat Pulldown",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Full hang at bottom, chin over bar"
+        "tempo_or_cue": "Pull to upper chest, squeeze shoulder blades"
       },
       {
         "muscle": "Chest",
@@ -227,11 +154,27 @@
       },
       {
         "muscle": "Back",
-        "name": "Band Pull-Apart",
+        "name": "Machine Rear Delt Fly (targets upper back)",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Slow and controlled, squeeze at end range"
+        "tempo_or_cue": "Squeeze shoulder blades together"
+      },
+      {
+        "muscle": "Back",
+        "name": "Dumbbell Pullover",
+        "reps": "1\u20136 reps",
+        "rest": "3\u20135 min",
+        "sets": 4,
+        "tempo_or_cue": "Controlled stretch overhead, ribcage down"
+      },
+      {
+        "muscle": "Chest",
+        "name": "Incline Dumbbell Fly",
+        "reps": "1\u20136 reps",
+        "rest": "3\u20135 min",
+        "sets": 4,
+        "tempo_or_cue": "Slow negative, don't overstretch shoulders"
       },
       {
         "muscle": "Chest",
@@ -243,27 +186,27 @@
       },
       {
         "muscle": "Triceps",
-        "name": "Overhead Cable Triceps Extension",
+        "name": "Machine Triceps Dip",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Elbows stay close to head"
+        "tempo_or_cue": "Controlled tempo, don't lock out hard"
       },
       {
         "muscle": "Shoulders",
-        "name": "Band Lateral Raise",
+        "name": "Reverse Pec Deck (rear delt)",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Constant tension, no jerking"
+        "tempo_or_cue": "Squeeze rear delts, controlled tempo"
       },
       {
         "muscle": "Biceps",
-        "name": "Incline Dumbbell Curl",
+        "name": "Hammer Curl (dumbbell)",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Full stretch at bottom"
+        "tempo_or_cue": "Neutral grip, controlled tempo"
       }
     ],
     "is_rest": false,
@@ -278,37 +221,22 @@
   },
   {
     "_injury_safety_note": "Some exercises were excluded or reduced today because you flagged: knee. If this is inaccurate, update your intake notes; if the area is still symptomatic, check with a coach or doctor before pushing load through it.",
-    "_validation": {
-      "rejected": [],
-      "repairs": [],
-      "warnings": [
-        "calves: duplicate 'calf_raise' pattern on Single-Leg Calf Raise (dumbbell) \u2014 no alternative pattern available in pool, kept as-is"
-      ]
-    },
     "exercises": [
       {
         "muscle": "Legs",
-        "name": "Bodyweight Squat (loaded w/ backpack)",
+        "name": "Hack Squat Machine",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Slow 3-sec descent, pause at bottom"
+        "tempo_or_cue": "Controlled descent, drive through heels"
       },
       {
         "muscle": "Legs",
-        "name": "Leg Press",
+        "name": "Lying Leg Curl",
         "reps": "1\u20136 reps",
         "rest": "3\u20135 min",
         "sets": 4,
-        "tempo_or_cue": "Full range, don't lock knees out at top"
-      },
-      {
-        "muscle": "Calves",
-        "name": "Standing Calf Raise Machine",
-        "reps": "1\u20136 reps",
-        "rest": "3\u20135 min",
-        "sets": 4,
-        "tempo_or_cue": "Full range, pause at top"
+        "tempo_or_cue": "Full stretch at bottom"
       },
       {
         "muscle": "Calves",
