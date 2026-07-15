@@ -1,23 +1,25 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
-from jose.backends import ECKey
-import json
 
 from app.config import settings
 
 bearer_scheme = HTTPBearer()
 
-SUPABASE_PUBLIC_KEY = {
-    "x": "Uu49gRgWf8xQCytbX0aWywSPaASUbzH-aJzZ9e_aIY8",
-    "y": "wshVnNUXRCWSKXJQd525JpvgIvAF02D5oRKYB2YYcuk",
-    "alg": "ES256",
-    "crv": "P-256",
-    "ext": True,
-    "kid": "f16c9d0a-f71e-4c1f-8f9b-2091c07c1f26",
-    "kty": "EC",
-    "key_ops": ["verify"]
-}
+# Fix (flagged as a known, unfixed bug in admin-dashboard-backend's HANDOFF.md):
+# this used to verify with a hardcoded ES256 public key, but Supabase's
+# legacy JWT signing (the "legacy JWT secret" shown in Project Settings ->
+# API) issues HS256 tokens, not ES256. Verifying with the wrong algorithm
+# either throws on every request or silently only "worked" for a token
+# shape that never matched what Supabase actually issues. Switched to
+# HS256 with the shared secret already present in .env
+# (SUPABASE_JWT_SECRET) - it was already read into settings, just unused.
+#
+# If this project later migrates to Supabase's newer per-project signing
+# keys (asymmetric, ES256/RS256 with a JWKS endpoint), this needs to change
+# again to fetch and cache the JWKS instead of a static key. Not done here
+# since the current project is still on the legacy HS256 shared secret.
+
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -26,8 +28,8 @@ def get_current_user(
     try:
         payload = jwt.decode(
             token,
-            SUPABASE_PUBLIC_KEY,
-            algorithms=["ES256"],
+            settings.supabase_jwt_secret,
+            algorithms=["HS256"],
             audience="authenticated",
         )
     except JWTError as e:
