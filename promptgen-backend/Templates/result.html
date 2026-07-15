@@ -97,20 +97,12 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;
 .sb-progress-wrap{padding:2px 6px 20px;white-space:nowrap}
 .sb-progress-day{font-size:20px;font-weight:800;color:#fff;margin-bottom:8px}
 .sb-progress-track{height:6px;background:var(--bg4);border-radius:4px;overflow:hidden;position:relative}
-/* Progress-bar fills (sidebar, day-strip .dt-bar-fill, weekly .wbar) all share
-   one animation contract: width:100% + transform:scaleX(pct/100) from a fixed
-   left origin, animated on `transform` (not `width`) so the browser can
-   composite the change on the GPU instead of reflowing layout on every frame
-   — this is what removes the mobile/Safari jank and keeps all three bars
-   animating at the exact same speed/curve. See PROGRESS_BAR_TRANSITION below,
-   reused by .dt-bar-fill and .wbar so the three never drift out of sync. */
-:root{ --progress-transition: transform .6s var(--ease); }
-.sb-progress-fill{width:100%;height:100%;transform-origin:left;transform:scaleX(0);transition:var(--progress-transition);will-change:transform;background:linear-gradient(90deg,#a855f7,#6366f1);border-radius:4px;position:relative;overflow:hidden}
+.sb-progress-fill{height:100%;background:linear-gradient(90deg,#a855f7,#6366f1);border-radius:4px;position:relative;overflow:hidden}
 .sb-progress-fill.pf-over{background:linear-gradient(90deg,#22c55e,#16a34a)}
 .sb-progress-fill.pf-under{background:linear-gradient(90deg,#f97316,#ef4444)}
 .sb-progress-fill.pf-fatigue{background:linear-gradient(90deg,#ef4444,#b91c1c)}
 .sb-progress-frac.pf-fatigue-text{color:#f87171;font-weight:700}
-.sb-progress-fill::after,.dt-bar-fill::after,.wbar::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent,#ffffff55,transparent);animation:shimmer 2.2s ease-in-out infinite}
+.sb-progress-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent,#ffffff55,transparent);animation:shimmer 2.2s ease-in-out infinite}
 @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .sb-progress-frac{font-size:10px;color:var(--muted);margin-top:6px;text-align:right}
 
@@ -182,7 +174,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .dt.active .dt-date{color:#fff}
 .dt-bar{height:4px;background:var(--bg4);border-radius:3px;margin-top:9px;overflow:hidden}
 .dt.active .dt-bar{background:#ffffff33}
-.dt-bar-fill{width:100%;height:100%;border-radius:3px;position:relative;overflow:hidden;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,var(--lime),var(--lime2));transition:var(--progress-transition);will-change:transform}
+.dt-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width .8s var(--ease)}
 .dt-bar-fill.pf-over{background:linear-gradient(90deg,#22c55e,#16a34a)}
 .dt-bar-fill.pf-under{background:linear-gradient(90deg,#f97316,#ef4444)}
 .dt-bar-fill.pf-fatigue{background:linear-gradient(90deg,#ef4444,#b91c1c)}
@@ -273,6 +265,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .set-field-row input:focus{outline:none;border-color:var(--lime);box-shadow:0 0 0 3px #a855f733}
 .set-stars-row{display:flex;align-items:center;gap:8px;margin-top:8px}
 .set-stars-row .set-cell-hint{font-size:9px;color:var(--dim);font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.set-overachieve-warning{display:none;font-size:9px;font-weight:700;color:#f87171;margin-top:6px;line-height:1.3}
 .set-stars{font-size:15px;letter-spacing:2px;user-select:none;display:flex;gap:1px}
 .set-stars .star,.ex-stars .star{color:var(--dim);cursor:pointer;transition:color .12s,transform .12s}
 .set-stars .star.filled,.ex-stars .star.filled{color:var(--lime2);text-shadow:0 0 8px #a855f766}
@@ -359,7 +352,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .week-row-main{display:flex;align-items:center;gap:10px}
 .wday{width:28px;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .wbar-bg{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
-.wbar{width:100%;height:100%;border-radius:3px;position:relative;overflow:hidden;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,var(--lime),var(--lime2));transition:var(--progress-transition);will-change:transform}
+.wbar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width .8s cubic-bezier(.34,1.56,.64,1);width:0}
 .wbar.pf-over{background:linear-gradient(90deg,#22c55e,#16a34a)}
 .wbar.pf-under{background:linear-gradient(90deg,#f97316,#ef4444)}
 .wbar.pf-fatigue{background:linear-gradient(90deg,#ef4444,#b91c1c)}
@@ -450,7 +443,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 
     <div class="sb-progress-wrap">
       <div class="sb-progress-day">Reps vs target</div>
-      <div class="sb-progress-track"><div class="sb-progress-fill" id="sbProgressFill" style="transform:scaleX(0)"></div></div>
+      <div class="sb-progress-track"><div class="sb-progress-fill" id="sbProgressFill" style="width:0%"></div></div>
       <div class="sb-progress-frac" id="sbProgressFrac">No reps logged yet</div>
     </div>
 
@@ -509,7 +502,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
       {% for day in workout.days %}
       <div class="dt{% if loop.index0 == 0 %} active{% endif %}{% if day.is_rest %} dt-rest{% endif %}" data-day-index="{{ loop.index0 }}">
         <div class="dt-date">{{ day.short }} {{ day.name }}</div>
-        <div class="dt-bar"><div class="dt-bar-fill" style="transform:scaleX({% if day.is_rest %}0{% else %}.75{% endif %})"></div></div>
+        <div class="dt-bar"><div class="dt-bar-fill" style="width:{% if day.is_rest %}0{% else %}75{% endif %}%"></div></div>
       </div>
       {% endfor %}
     </div>
@@ -548,7 +541,7 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
             <div class="week-row-main">
               <div class="wday">{{ day.short }}</div>
               <div class="wbar-bg">
-                <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="transform:scaleX({{ ((day.bar_width | default(0)) | float | round(2)) / 100 }})" data-bar-pct="{{ day.bar_width | default(0) }}"></div>
+                <div class="wbar{% if day.is_rest %} wrest{% endif %}" style="width:{{ day.bar_width }}%"></div>
               </div>
               <span class="wlabel{% if not day.is_rest %} active-day{% endif %}">{{ day.label }}</span>
             </div>
@@ -627,8 +620,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
                         </div>
                         <div class="set-field-row">
                           <label>Reps</label>
-                          <input type="text" inputmode="numeric" class="reps-input" placeholder="{{ ex.reps }}" oninput="updateExerciseStatus(this)">
+                          <input type="text" inputmode="numeric" class="reps-input" placeholder="{{ ex.reps }}" oninput="updateExerciseStatus(this); checkSetOverachieve(this)">
                         </div>
+                        <div class="set-overachieve-warning" data-set-warning></div>
                       </div>
                       {% endfor %}
                     </div>
@@ -985,6 +979,41 @@ function parseReps(val) {
   return single ? parseFloat(single[1]) : null;
 }
 
+// Per-SET overachievement warning — fires as soon as one set's logged reps
+// go well past its own target (>150%), independent of the day/week bar
+// (which now caps each set's contribution so it can't be distorted by one
+// outlier — see computeAndRenderProgress). This is the direct, per-set
+// signal: "you did way more reps on THIS set than prescribed", shown right
+// under that set's reps field instead of only surfacing in the aggregate.
+function checkSetOverachieve(repsInput) {
+  const cell = repsInput.closest('.set-cell');
+  if (!cell) return;
+  const warnEl = cell.querySelector('[data-set-warning]');
+  if (!warnEl) return;
+
+  const recommended = parseReps(cell.dataset.recommendedReps);
+  const rawVal = repsInput.value.trim();
+  if (recommended === null || recommended <= 0 || rawVal === '') {
+    warnEl.style.display = 'none';
+    warnEl.textContent = '';
+    return;
+  }
+  const actual = parseReps(rawVal);
+  if (actual === null) {
+    warnEl.style.display = 'none';
+    warnEl.textContent = '';
+    return;
+  }
+  const pct = Math.round((actual / recommended) * 100);
+  if (pct > 150) {
+    warnEl.textContent = '⚠ ' + pct + '% of this set\'s target (' + recommended + ' reps) — well above prescribed, consider adding weight instead of extra reps';
+    warnEl.style.display = 'block';
+  } else {
+    warnEl.style.display = 'none';
+    warnEl.textContent = '';
+  }
+}
+
 // Overall progress: for every set with a numeric recommended-reps target,
 // sum the WHOLE DAY's target reps (every set, touched or not) vs whatever
 // has actually been logged — this shows real progress through the day's
@@ -1008,7 +1037,17 @@ function computeAndRenderProgress() {
     const repsInput = cell.querySelector('.reps-input');
     const rawVal = repsInput ? repsInput.value.trim() : '';
     const touched = rawVal !== '';
-    const actual = touched ? (parseReps(rawVal) || 0) : 0;
+    const rawActual = touched ? (parseReps(rawVal) || 0) : 0;
+    // Cap what a SINGLE set can contribute to the day/week total at 150% of
+    // that set's own target (same ceiling used for the fatigue-risk label
+    // below). Without this, a user who does nothing but one exercise —
+    // say 100 reps on one set instead of the recommended 10 — could push
+    // the whole day's bar up as if most of the workout were done, since the
+    // raw excess reps get summed in uncapped and count against every OTHER
+    // set's target too. Capping per-set means overachieving one set can
+    // only ever fill that one set's own slice of the bar, never someone
+    // else's, so skipped exercises still correctly show up as incomplete.
+    const actual = Math.min(rawActual, recommended * 1.5);
 
     const di = cell.dataset.dayIndex;
     if (!perDay[di]) perDay[di] = { rec: 0, act: 0, any: false };
@@ -1029,7 +1068,7 @@ function computeAndRenderProgress() {
   document.querySelectorAll('.dt').forEach(dt => {
     const barFill = dt.querySelector('.dt-bar-fill');
     if (!barFill) return;
-    if (dt.classList.contains('dt-rest')) { barFill.style.transform = 'scaleX(0)'; return; }
+    if (dt.classList.contains('dt-rest')) { barFill.style.width = '0%'; return; }
     const stats = perDay[dt.dataset.dayIndex];
     renderProgressBar(barFill, null, stats ? stats.rec : 0, stats ? stats.act : 0, !!(stats && stats.any));
   });
@@ -1065,16 +1104,12 @@ function renderProgressBar(fillEl, fracEl, recommended, actual, hasData) {
   fillEl.classList.remove('pf-over', 'pf-under', 'pf-fatigue');
   if (fracEl) fracEl.classList.remove('pf-fatigue-text', 'pf-over-text', 'pf-under-text');
   if (!hasData || recommended <= 0) {
-    fillEl.style.transform = 'scaleX(0)';
+    fillEl.style.width = '0%';
     if (fracEl) fracEl.textContent = 'No reps logged yet';
     return;
   }
   const pct = Math.round((actual / recommended) * 100);
-  // Visual fill is clamped to 0-100% (a negative or >100% scaleX would either
-  // invert the bar or overflow its track) — the unclamped pct is still used
-  // below for the "over target" / "fatigue" text and state classes.
-  const visualPct = Math.max(0, Math.min(pct, 100));
-  fillEl.style.transform = 'scaleX(' + (visualPct / 100) + ')';
+  fillEl.style.width = Math.min(pct, 100) + '%';
   if (pct > 150) fillEl.classList.add('pf-fatigue');
   else if (pct >= 100) fillEl.classList.add('pf-over');
   else if (pct < 90) fillEl.classList.add('pf-under');
@@ -1148,7 +1183,10 @@ document.querySelectorAll('.ex-stars').forEach(group => {
         const weightInput = cell.querySelector('.weight-input');
         const repsInput = cell.querySelector('.reps-input');
         if (weightInput && row.weight_kg !== null && row.weight_kg !== undefined) weightInput.value = row.weight_kg;
-        if (repsInput && row.reps_used !== null && row.reps_used !== undefined) repsInput.value = row.reps_used;
+        if (repsInput && row.reps_used !== null && row.reps_used !== undefined) {
+          repsInput.value = row.reps_used;
+          checkSetOverachieve(repsInput);
+        }
       });
 
       const { data: exRows, error: exErr } = await supabase
@@ -1466,11 +1504,11 @@ document.querySelectorAll('.ex-stars').forEach(group => {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   requestAnimationFrame(() => {
     document.querySelectorAll('.wbar.wrest').forEach(bar => {
-      const target = bar.style.transform;
+      const target = bar.style.width;
       if (!target) return;
       if (prefersReduced) return;
-      bar.style.transform = 'scaleX(0)';
-      requestAnimationFrame(() => { bar.style.transform = target; });
+      bar.style.width = '0%';
+      requestAnimationFrame(() => { bar.style.width = target; });
     });
   });
 

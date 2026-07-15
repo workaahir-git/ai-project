@@ -211,6 +211,39 @@ MIN_EXERCISES = {
 }
 
 
+# ── MEALS-PER-DAY → NAMED SLOT MAP ────────────────────────────────────────────
+# Previously the prompt hard-coded "5 meals: breakfast, mid, lunch, post,
+# dinner" (and "5 meals x 3 options = 15 total") no matter what meals_count
+# actually was, so a client who picked e.g. 3 meals/day still got prompted
+# for 5 named slots and meals_per_day was never really honoured. This table
+# gives every supported meals_count (2-6, matching the dashboard slider) its
+# own correct slot list — 3 meals/day means EXACTLY breakfast, lunch, and
+# dinner, with no snack/pre-/post-workout meal invented.
+MEAL_SLOTS_BY_COUNT = {
+    2: ["breakfast", "dinner"],
+    3: ["breakfast", "lunch", "dinner"],
+    4: ["breakfast", "lunch", "pre_workout", "dinner"],
+    5: ["breakfast", "mid_morning_snack", "lunch", "post_workout", "dinner"],
+    6: ["breakfast", "mid_morning_snack", "lunch", "pre_workout", "post_workout", "dinner"],
+}
+
+MEAL_SLOT_LABELS = {
+    "breakfast":          "Breakfast",
+    "lunch":              "Lunch",
+    "dinner":             "Dinner",
+    "mid_morning_snack":  "Mid-Morning Snack",
+    "pre_workout":        "Pre-Workout Meal",
+    "post_workout":       "Post-Workout Meal",
+}
+
+
+def _meal_slots_for_count(meals_count: int) -> list[str]:
+    """Clamp to the supported 2-6 range and return the exact named slots
+    for that count — never silently falls back to a 5-meal list."""
+    clamped = max(2, min(6, int(meals_count)))
+    return MEAL_SLOTS_BY_COUNT[clamped]
+
+
 # ── TOKEN → MUSCLE GROUP MAP ──────────────────────────────────────────────────
 # Maps split-day tokens (from split_engine.py) to the ordered list of muscle
 # groups trained that day. "big" groups (rank 1–4) each get exactly one compound;
@@ -375,13 +408,16 @@ UPPER_FIXED_DAY_PLAN_BY_TIER = {
     "beginner": {
         "muscles": ["back", "chest", "shoulders", "biceps", "triceps"],
         "compound_muscles": ["back", "chest"],
-        # No dedicated arm isolation slot on this combined day at the
-        # beginner tier — the back/chest compounds already load biceps/
-        # triceps synergistically, and beginners get direct, floor-protected
-        # arm isolation on their (far more common) Push/Pull/Legs days via
-        # BEGINNER_FIXED_DAY_PLANS instead. Total = 5, matching
-        # BEGINNER_CAP_OTHER_DAY.
-        "isolation_by_muscle": {"back": 1, "chest": 1, "shoulders": 1, "biceps": 0, "triceps": 0},
+        # FIX: the previous version gave back/chest a "bonus" isolation
+        # exercise on top of their compound lift and left biceps/triceps at
+        # zero — in practice this meant beginner upper days trained only
+        # chest/back/shoulders and never touched arms directly. Back and
+        # chest already get their compound lift, so their isolation slots
+        # are reallocated to shoulders/biceps/triceps instead, guaranteeing
+        # every one of the 5 trained muscles gets at least one exercise.
+        # Total exercises is unchanged (2 compound + 3 isolation = 5),
+        # still matching BEGINNER_CAP_OTHER_DAY exactly.
+        "isolation_by_muscle": {"back": 0, "chest": 0, "shoulders": 1, "biceps": 1, "triceps": 1},
     },
     "intermediate": {
         "muscles": ["back", "chest", "shoulders", "biceps", "triceps"],
@@ -655,7 +691,7 @@ def _compute_day_plan(
     # same trim direction exercise_database.py already uses for the
     # beginner-only cap, so the two caps never disagree about what gets cut.
     if session_minutes is not None and total_exercises > 0:
-        cap = session_duration_cap(session_minutes, goal)
+        cap = session_duration_cap(session_minutes)
         if total_exercises > cap:
             overflow = total_exercises - cap
             # pass 1: trim every muscle down to its protected floor (arm
@@ -1469,7 +1505,8 @@ SCHEMA (copy key names precisely):
         ]
         // EXACTLY 3 distinct options per meal — see MEAL RULES below
       }
-      // 5 meals: breakfast, mid, lunch, post, dinner
+      // The meal slots to actually use, and how many, are given below under
+      // "Meals per day" — do NOT default to 5 meals; match that count exactly.
     ]
   },
   "recovery": {
@@ -1566,6 +1603,8 @@ def build_user_prompt(profile: dict) -> str:
     target_wt   = profile.get("target_weight_kg", "—")
     medical     = profile.get("medical_notes", "none")
     meals_count = int(profile.get("meals_per_day", 5))
+    meal_slots = _meal_slots_for_count(meals_count)
+    meal_slots_str = ", ".join(MEAL_SLOT_LABELS[s] for s in meal_slots)
 
     # ── 6. Goal sentence
     goal = profile.get("goal", "fat loss")
@@ -1660,6 +1699,8 @@ Set plan.goal_label      = "{goal_label}"
 ━━ DIET — CRITICAL RESTRICTION ━━
 {diet_token}
 Meals per day: {meals_count}  (spread the {m['target_kcal']} kcal across exactly {meals_count} meals)
+Required meal slots (use EXACTLY these {meals_count}, in this order, no others — do not add a snack,
+pre-workout, or post-workout meal unless it is listed here): {meal_slots_str}
 Region / cuisine preference: {region} — use locally available kirana/sabzi mandi ingredients
 Food budget: {budget}
 
@@ -1674,13 +1715,15 @@ For EVERY meal option supply these EXACT fields:
   "fat_g": <integer>
 
 MEAL OPTION RULES (mandatory):
-- Each meal slot (breakfast, mid, lunch, post, dinner) MUST contain EXACTLY 3 entries in "options".
+- Produce EXACTLY {meals_count} meal slots — {meal_slots_str} — no more, no fewer.
+- Each of those {meals_count} meal slots MUST contain EXACTLY 3 entries in "options".
 - The 3 options for a given meal must use genuinely different core ingredients/dishes from
   each other (not the same dish with a swapped garnish) — give the client real variety to
   rotate through during the week.
 - All 3 options for a meal must independently land within roughly ±10% of that meal's target
   kcal/protein share, so any one of the 3 is a valid swap-in.
-- Do not skip this for any of the 5 meals — 5 meals × 3 options = 15 total option objects in "diet.meals[].options".
+- Do not skip this for any of the {meals_count} meals — {meals_count} meals × 3 options =
+  {meals_count * 3} total option objects in "diet.meals[].options".
 
 The sum of protein_g across the day's meals (best option of each) must hit ~{m['protein_g_mid']} g.
 The sum of kcal must be within ±80 kcal of {m['target_kcal']}.
@@ -1900,6 +1943,23 @@ def enforce_schema(data: dict, profile: dict | None = None) -> dict:
                     f"Only {len(day['exercises'])} exercise(s) generated for this day — "
                     f"below the requested minimum of {min_expected}. Consider regenerating."
                 )
+
+    # STEP (Meals-Per-Day Enforcement): the prompt now asks for an exact,
+    # named set of meal slots derived from profile["meals_per_day"] (see
+    # _meal_slots_for_count / MEAL_SLOTS_BY_COUNT above), but the LLM can
+    # still ignore that and return the wrong number of meals. Flag it here,
+    # the same way low exercise counts / missing warmups are flagged, so a
+    # mismatch is visible instead of silently shipping the wrong meal count.
+    if profile is not None and "meals_per_day" in profile:
+        try:
+            expected_meals = len(_meal_slots_for_count(profile.get("meals_per_day", 5)))
+        except (TypeError, ValueError):
+            expected_meals = None
+        if expected_meals is not None and len(data["diet"].get("meals", [])) != expected_meals:
+            data["diet"]["_meal_count_warning"] = (
+                f"Requested {expected_meals} meals/day but {len(data['diet'].get('meals', []))} "
+                f"meal slot(s) were generated — the LLM did not honour meals_per_day."
+            )
 
     # Ensure each meal has full macro fields
     for meal in data["diet"].get("meals", []):
