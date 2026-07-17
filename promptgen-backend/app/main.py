@@ -90,7 +90,7 @@ def health():
 # separate repos) already produces links shaped like
 # `{MEMBER_APP_BASE_URL}/member/login?gym={slug}`. Historically nothing on
 # this side served that path — the real member login page is the static
-# frontend (login.html.html, deployed on Vercel), not this FastAPI backend.
+# frontend (login.html, deployed on Vercel), not this FastAPI backend.
 # This route is a thin, environment-portable bridge: it 302s straight to the
 # real login page with `?gym=` preserved, so MEMBER_APP_BASE_URL can point at
 # *this* backend's public URL without the dev-console needing to know the

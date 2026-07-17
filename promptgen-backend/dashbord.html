@@ -87,7 +87,7 @@ pre { white-space: pre-wrap; background: #eef7f1; border-radius: 12px; padding: 
   // Guard: bounce to login if there's no active session
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) {
-    window.location.href = 'login.html.html'
+    window.location.href = 'login.html'
   }
 
   // Guard 2: if this member already has an active saved plan, skip the

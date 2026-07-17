@@ -93,7 +93,7 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
 <body>
 <script type="module">
   // ── Multi-gym skeleton ──────────────────────────────────────────────────
-  // Set once at login.html.html (from ?gym=<slug>), read here and attached
+  // Set once at login.html (from ?gym=<slug>), read here and attached
   // as X-Gym-Slug on every backend call. No slug stored -> header omitted
   // -> backend falls back to the single demo gym, unchanged from before.
   window.__gymHeaders = () => {
@@ -104,14 +104,14 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
   // The member's identity is this app's own session token, issued by
   // POST /member/login (or /member/set-password on first login) after the
   // member enters their gym's 8-digit code and password (see
-  // login.html.html). There is no Supabase Auth session anymore — members
+  // login.html). There is no Supabase Auth session anymore — members
   // never sign up through Supabase at all.
   window.__getAccessToken = async () => localStorage.getItem('memberToken')
 
   // Guard: bounce to login if there's no stored session token
   const memberToken = localStorage.getItem('memberToken')
   if (!memberToken) {
-    window.location.href = 'login.html.html'
+    window.location.href = 'login.html'
   }
 
   // Guard 2: if this member already has an active saved plan, skip the
@@ -131,7 +131,7 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
 } else if (res.status === 401) {
   // Token missing/expired/invalid — the stored session is no good anymore.
   localStorage.removeItem('memberToken')
-  window.location.href = 'login.html.html'
+  window.location.href = 'login.html'
 } else if (res.status === 403) {
   const err = await res.json().catch(() => ({}))
   document.body.innerHTML = '<div style="font-family:sans-serif;padding:60px;text-align:center">' +
@@ -153,7 +153,7 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     localStorage.removeItem('memberToken')
     localStorage.removeItem('memberName')
-    window.location.href = 'login.html.html'
+    window.location.href = 'login.html'
   })
 
   // Dev helper: expire the cached plan row so the next "Generate My Plan"

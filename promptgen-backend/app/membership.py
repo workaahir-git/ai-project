@@ -11,7 +11,7 @@ def _extract_gym_slug(request: Request, x_gym_slug: str | None) -> str | None:
     """
     Slug can arrive two ways, checked in this order:
     1. `X-Gym-Slug` header - what the frontend sends on every call once a
-       member has logged in via a gym-specific link (see login.html.html /
+       member has logged in via a gym-specific link (see login.html /
        localStorage['gymSlug']).
     2. `?gym=` query param - convenience for routes hit directly (e.g. a
        bookmarked link, or a manual test), same as the `/member/login?gym=`
