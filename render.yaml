@@ -24,3 +24,5 @@ services:
         sync: false
       - key: MEMBER_FRONTEND_URL
         sync: false
+      - key: MEMBER_SESSION_SECRET
+        sync: false
