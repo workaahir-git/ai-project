@@ -5,11 +5,10 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Form, Header, Body
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
-from app.auth import issue_member_token, hash_password, verify_password
+from app.auth import issue_member_token
 from app.membership import (
     get_current_member,
     find_member_by_login_code,
-    set_member_password_hash,
     _extract_gym_slug,
 )
 from app.gym_scope import resolve_gym_id, GymLookupError
@@ -18,7 +17,7 @@ from app.ollama_client import generate_with_ollama
 from app.schemas import (
     GenerateRequest, GenerateResponse, FeedbackSubmission, CheckinSubmission,
     SetFeedbackSubmission, ExerciseFeedbackSubmission,
-    MemberCheckCodeRequest, MemberSetPasswordRequest, MemberLoginRequest,
+    MemberLoginRequest,
 )
 from app.fitness_generator import (
     SYSTEM_PROMPT,
@@ -116,37 +115,19 @@ def member_login_redirect(gym: str | None = None):
     return RedirectResponse(url=target, status_code=302)
 
 
-# ── Member auth: login_code + password (Phase 2) ────────────────────────────
-# The identity anchor is still the gym-issued 8-digit `login_code` (Phase 1:
-# a code that doesn't match any row in this gym is "wrong code", never
-# "create a new account" — there is no signup). Phase 2 adds a password on
-# top: the code says WHICH member, the password proves it's actually them.
+# ── Member auth: login_code only ─────────────────────────────────────────────
+# The identity anchor is the gym-issued 8-digit `login_code` (a code that
+# doesn't match any row in this gym is "wrong code", never "create a new
+# account" — there is no signup). There is no member password: the code
+# alone is the credential, matching what the gym hands out.
 #
-# gym-dashboard's Add Member (untouched, per this phase's scope) never sets
-# a password — a freshly created member row has `password_hash = NULL`.
-# That NULL is exactly how "this member needs to set a password" is
-# detected below; there is no separate "first login" flag anywhere.
+# One endpoint, unauthenticated (no session token yet — that's the whole
+# point):
+#   POST /member/login - code only. Issues a session token immediately.
 #
-# Three endpoints, all unauthenticated (no session token yet — that's the
-# whole point):
-#   POST /member/check-code    - code only. Tells the frontend whether to
-#                                 render the "set a password" form or the
-#                                 normal "enter your password" form. Never
-#                                 issues a token.
-#   POST /member/set-password  - code + new password + confirm. Only valid
-#                                 while password_hash is still NULL (a
-#                                 member who already has a password must use
-#                                 /member/login instead — this endpoint is
-#                                 not a "reset password" route). Logs the
-#                                 member in immediately on success.
-#   POST /member/login         - code + password, for a member who already
-#                                 has a password set.
-#
-# Known gap, carried over from Phase 1 and still true here: no rate
-# limiting on any of these three. A password is a real second factor now
-# (better than the code alone), but per-IP/per-gym attempt throttling is
-# still worth adding before this goes to real users at scale — left as a
-# follow-up, same as before.
+# Known gap: no rate limiting on this endpoint. The code is the only
+# factor, so per-IP/per-gym attempt throttling is worth adding before this
+# goes to real users at scale — left as a follow-up.
 def _resolve_gym_or_404(request: Request, x_gym_slug: str | None, body_gym: str | None) -> str:
     slug = _extract_gym_slug(request, x_gym_slug) or body_gym
     try:
@@ -160,66 +141,6 @@ def _require_code(code: str | None) -> str:
     if not code:
         raise HTTPException(status_code=400, detail="Enter your login code.")
     return code
-
-
-@app.post("/member/check-code")
-def member_check_code(
-    body: MemberCheckCodeRequest,
-    request: Request,
-    x_gym_slug: str | None = Header(default=None, alias="X-Gym-Slug"),
-):
-    gym_id = _resolve_gym_or_404(request, x_gym_slug, body.gym)
-    code = _require_code(body.code)
-
-    member = find_member_by_login_code(gym_id, code)
-    if not member:
-        raise HTTPException(status_code=401, detail="Invalid code. Check with your gym and try again.")
-    if member.get("status") != "active":
-        raise HTTPException(status_code=403, detail="Your account isn't active. Contact your gym.")
-
-    return {
-        "has_password": bool(member.get("password_hash")),
-        "name": member.get("name"),
-    }
-
-
-@app.post("/member/set-password")
-def member_set_password(
-    body: MemberSetPasswordRequest,
-    request: Request,
-    x_gym_slug: str | None = Header(default=None, alias="X-Gym-Slug"),
-):
-    gym_id = _resolve_gym_or_404(request, x_gym_slug, body.gym)
-    code = _require_code(body.code)
-
-    member = find_member_by_login_code(gym_id, code)
-    if not member:
-        raise HTTPException(status_code=401, detail="Invalid code. Check with your gym and try again.")
-    if member.get("status") != "active":
-        raise HTTPException(status_code=403, detail="Your account isn't active. Contact your gym.")
-    if member.get("password_hash"):
-        # Already set — this route is "first-time setup", not "reset". A
-        # returning member who ends up here (e.g. a stale/bookmarked form)
-        # should log in normally instead.
-        raise HTTPException(
-            status_code=409,
-            detail="A password is already set for this account. Please log in instead.",
-        )
-
-    password = body.password or ""
-    confirm = body.confirm_password or ""
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
-    if password != confirm:
-        raise HTTPException(status_code=400, detail="Passwords do not match.")
-
-    set_member_password_hash(member["id"], hash_password(password))
-
-    token = issue_member_token(member["id"], gym_id)
-    return {
-        "token": token,
-        "member": {"id": member["id"], "name": member.get("name"), "gym_id": gym_id},
-    }
 
 
 @app.post("/member/login")
@@ -236,24 +157,6 @@ def member_login(
         raise HTTPException(status_code=401, detail="Invalid code. Check with your gym and try again.")
     if member.get("status") != "active":
         raise HTTPException(status_code=403, detail="Your account isn't active. Contact your gym.")
-
-    stored_hash = member.get("password_hash")
-    if not stored_hash:
-        # No password set yet — this is actually a first-login, just routed
-        # to the wrong endpoint (frontend should have called /check-code
-        # first). Tell it explicitly rather than a generic 401, so the UI
-        # can redirect to the set-password screen instead of showing
-        # "wrong password" for a password that was never set.
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "This account hasn't set a password yet.",
-                "needs_password_setup": True,
-            },
-        )
-
-    if not verify_password(body.password or "", stored_hash):
-        raise HTTPException(status_code=401, detail="Incorrect password. Try again.")
 
     token = issue_member_token(member["id"], gym_id)
     return {
@@ -367,6 +270,10 @@ def _get_latest_plan_any_status(member_id: str) -> dict | None:
 
 
 REASSESSMENT_INTERVAL_DAYS = 14
+# TEMP TEST OVERRIDE: firing the check-in after 5 minutes instead of 14 days
+# so the flow can be verified quickly. Remove/revert this block to go back
+# to the real 14-day cadence.
+REASSESSMENT_INTERVAL_MINUTES_TEST = 5
 
 
 @app.get("/api/checkin/eligibility")
@@ -386,7 +293,7 @@ def checkin_eligibility(
 
     cycle_number = plan["cycle_number"]
     created_at = datetime.fromisoformat(plan["created_at"].replace("Z", "+00:00"))
-    eligible_at = created_at + timedelta(days=REASSESSMENT_INTERVAL_DAYS)
+    eligible_at = created_at + timedelta(minutes=REASSESSMENT_INTERVAL_MINUTES_TEST)
     now = datetime.now(timezone.utc)
 
     history = checkin_engine.get_reassessment_history(member["id"], limit=1)

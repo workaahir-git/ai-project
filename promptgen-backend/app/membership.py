@@ -35,10 +35,7 @@ def find_member_by_login_code(gym_id: str, code: str) -> dict | None:
     first place. If the code doesn't match a row in this gym, that's not
     "create an account", it's "wrong code" (see main.py's 401 handling).
 
-    Phase 2 note: the returned row's `password_hash` column is how the login
-    flow tells first-login (NULL — gym-dashboard never sets it) apart from a
-    returning member (set, from a prior POST /member/set-password). Callers
-    must never put `password_hash` itself in an API response.
+    The 8-digit code is the only credential — there is no member password.
     """
     res = (
         _supabase.table("members")
@@ -49,21 +46,6 @@ def find_member_by_login_code(gym_id: str, code: str) -> dict | None:
         .execute()
     )
     return res.data[0] if res.data else None
-
-
-def set_member_password_hash(member_id: str, password_hash: str) -> None:
-    """
-    Persists a member's password hash, set once on their first login (see
-    POST /member/set-password in main.py). gym-dashboard's Add Member flow
-    never populates this column — it starts NULL for every member it
-    creates, by design, since Add Member was intentionally left unmodified.
-    """
-    (
-        _supabase.table("members")
-        .update({"password_hash": password_hash})
-        .eq("id", member_id)
-        .execute()
-    )
 
 
 def get_current_member(

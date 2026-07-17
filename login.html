@@ -240,46 +240,12 @@
       >
     </div>
 
-    <button class="btn" id="continueBtn">Continue</button>
+    <button class="btn" id="continueBtn">Log in</button>
 
     <div class="help-text">
       Don't have a code? Ask the front desk at your gym — they'll add you as<br>
       a member and give you an 8-digit code to log in with.
     </div>
-  </div>
-
-  <!-- STEP 2A: returning member — enter password -->
-  <div class="step" id="stepLogin">
-    <div class="form-heading" id="loginGreeting">Welcome back</div>
-    <div class="form-sub">Enter your password to continue</div>
-
-    <div class="field">
-      <label for="loginPassword">Password</label>
-      <input id="loginPassword" class="text-input" type="password" autocomplete="current-password" placeholder="••••••••">
-    </div>
-
-    <button class="btn" id="loginBtn">Log in</button>
-    <button class="btn-text" id="backFromLogin">← Use a different code</button>
-  </div>
-
-  <!-- STEP 2B: first login — set a password -->
-  <div class="step" id="stepSetPassword">
-    <div class="form-heading" id="setPasswordGreeting">Set up your password</div>
-    <div class="form-sub">This is your first time logging in — create a password to secure your account</div>
-
-    <div class="field">
-      <label for="newPassword">New password</label>
-      <input id="newPassword" class="text-input" type="password" autocomplete="new-password" placeholder="At least 8 characters">
-    </div>
-
-    <div class="field">
-      <label for="confirmPassword">Confirm password</label>
-      <input id="confirmPassword" class="text-input" type="password" autocomplete="new-password" placeholder="Re-enter your password">
-      <div class="hint">Use at least 8 characters. You'll use this password every time you log in from now on.</div>
-    </div>
-
-    <button class="btn" id="savePasswordBtn">Save password &amp; log in</button>
-    <button class="btn-text" id="backFromSetPassword">← Use a different code</button>
   </div>
 
 </div>
@@ -309,29 +275,8 @@
   // ── Elements ──────────────────────────────────────────────────────────
   const errorMsg = document.getElementById('errorMsg');
 
-  const stepCode = document.getElementById('stepCode');
-  const stepLogin = document.getElementById('stepLogin');
-  const stepSetPassword = document.getElementById('stepSetPassword');
-
   const codeInput = document.getElementById('loginCode');
   const continueBtn = document.getElementById('continueBtn');
-
-  const loginPasswordInput = document.getElementById('loginPassword');
-  const loginBtn = document.getElementById('loginBtn');
-  const loginGreeting = document.getElementById('loginGreeting');
-  const backFromLogin = document.getElementById('backFromLogin');
-
-  const newPasswordInput = document.getElementById('newPassword');
-  const confirmPasswordInput = document.getElementById('confirmPassword');
-  const savePasswordBtn = document.getElementById('savePasswordBtn');
-  const setPasswordGreeting = document.getElementById('setPasswordGreeting');
-  const backFromSetPassword = document.getElementById('backFromSetPassword');
-
-  // Remembers the code that was checked, so step 2 doesn't need the user
-  // to retype it — both /member/login and /member/set-password still take
-  // it in the body since the backend re-validates on every call rather
-  // than trusting a client-held "this code was already checked" claim.
-  let checkedCode = '';
 
   function showError(msg) {
     errorMsg.textContent = msg;
@@ -341,12 +286,6 @@
   function hideError() {
     errorMsg.style.display = 'none';
     errorMsg.textContent = '';
-  }
-
-  function showStep(step) {
-    hideError();
-    [stepCode, stepLogin, stepSetPassword].forEach(s => s.classList.remove('active'));
-    step.classList.add('active');
   }
 
   function setLoading(btn, isLoading, loadingText, normalText) {
@@ -387,16 +326,16 @@
     window.location.href = 'dashbord.html';
   }
 
-  // ── STEP 1: check the code, decide which form to show next ─────────────
-  async function doCheckCode() {
+  // ── Log in with the code alone ──────────────────────────────────────────
+  async function doLogin() {
     hideError();
     const code = codeInput.value.trim();
     if (!code || code.length < 8) { showError('Enter your 8-digit login code'); return; }
 
-    setLoading(continueBtn, true, 'Checking…', 'Continue');
+    setLoading(continueBtn, true, 'Logging in…', 'Log in');
 
     try {
-      const res = await fetch(BACKEND_BASE + '/member/check-code', {
+      const res = await fetch(BACKEND_BASE + '/member/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...gymHeaders() },
         body: JSON.stringify({ code, gym: localStorage.getItem('gymSlug') || null }),
@@ -408,137 +347,16 @@
         return;
       }
 
-      checkedCode = code;
-      const name = data.name ? data.name.split(' ')[0] : '';
-
-      if (data.has_password) {
-        loginGreeting.textContent = name ? `Welcome back, ${name}` : 'Welcome back';
-        loginPasswordInput.value = '';
-        showStep(stepLogin);
-        loginPasswordInput.focus();
-      } else {
-        setPasswordGreeting.textContent = name ? `Hi ${name}, let's set up your password` : 'Set up your password';
-        newPasswordInput.value = '';
-        confirmPasswordInput.value = '';
-        showStep(stepSetPassword);
-        newPasswordInput.focus();
-      }
-    } catch (e) {
-      showError('Network error — please try again.');
-    } finally {
-      setLoading(continueBtn, false, 'Checking…', 'Continue');
-    }
-  }
-
-  // ── STEP 2A: normal login ────────────────────────────────────────────────
-  async function doLogin() {
-    hideError();
-    const password = loginPasswordInput.value;
-    if (!password) { showError('Enter your password'); return; }
-
-    setLoading(loginBtn, true, 'Logging in…', 'Log in');
-
-    try {
-      const res = await fetch(BACKEND_BASE + '/member/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...gymHeaders() },
-        body: JSON.stringify({
-          code: checkedCode,
-          password,
-          gym: localStorage.getItem('gymSlug') || null,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        // Edge case: the account somehow has no password yet even though
-        // /check-code said otherwise (e.g. it changed between the two
-        // calls) — the backend flags this explicitly so we can route
-        // there instead of showing a confusing "wrong password" error.
-        if (data && data.detail && data.detail.needs_password_setup) {
-          showStep(stepSetPassword);
-          showError('Please set up a password to continue.');
-          return;
-        }
-        showError(extractErrorDetail(data, 'Could not log in. Check your password and try again.'));
-        return;
-      }
-
       completeLogin(data);
     } catch (e) {
       showError('Network error — please try again.');
     } finally {
-      setLoading(loginBtn, false, 'Logging in…', 'Log in');
+      setLoading(continueBtn, false, 'Logging in…', 'Log in');
     }
   }
 
-  // ── STEP 2B: first-login password setup ─────────────────────────────────
-  async function doSetPassword() {
-    hideError();
-    const password = newPasswordInput.value;
-    const confirm = confirmPasswordInput.value;
-
-    if (password.length < 8) { showError('Password must be at least 8 characters'); return; }
-    if (password !== confirm) { showError('Passwords do not match'); return; }
-
-    setLoading(savePasswordBtn, true, 'Saving…', 'Save password & log in');
-
-    try {
-      const res = await fetch(BACKEND_BASE + '/member/set-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...gymHeaders() },
-        body: JSON.stringify({
-          code: checkedCode,
-          password,
-          confirm_password: confirm,
-          gym: localStorage.getItem('gymSlug') || null,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        // A password already exists (409) — someone else finished setup
-        // in the meantime, or this is a stale form. Send them to the
-        // normal login step instead of leaving them stuck here.
-        if (res.status === 409) {
-          loginPasswordInput.value = '';
-          showStep(stepLogin);
-          showError('A password is already set for this account — please log in.');
-          return;
-        }
-        showError(extractErrorDetail(data, 'Could not save your password. Please try again.'));
-        return;
-      }
-
-      completeLogin(data);
-    } catch (e) {
-      showError('Network error — please try again.');
-    } finally {
-      setLoading(savePasswordBtn, false, 'Saving…', 'Save password & log in');
-    }
-  }
-
-  continueBtn.addEventListener('click', doCheckCode);
-  codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doCheckCode(); });
-
-  loginBtn.addEventListener('click', doLogin);
-  loginPasswordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
-
-  savePasswordBtn.addEventListener('click', doSetPassword);
-  confirmPasswordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSetPassword(); });
-
-  backFromLogin.addEventListener('click', () => {
-    checkedCode = '';
-    codeInput.value = '';
-    showStep(stepCode);
-    codeInput.focus();
-  });
-  backFromSetPassword.addEventListener('click', () => {
-    checkedCode = '';
-    codeInput.value = '';
-    showStep(stepCode);
-    codeInput.focus();
-  });
+  continueBtn.addEventListener('click', doLogin);
+  codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
 </script>
 </body>
 </html>

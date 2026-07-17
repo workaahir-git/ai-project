@@ -1,29 +1,13 @@
 from pydantic import BaseModel
 
 
-# ── Member auth (Phase 2: login_code + password) ────────────────────────────
-# Three-step flow, all scoped by (gym, login_code) — see main.py for the
-# endpoints that use these:
-#   1. MemberCheckCodeRequest  -> POST /member/check-code
-#      "does this code belong to a member, and have they set a password yet?"
-#   2. MemberSetPasswordRequest -> POST /member/set-password (first login only)
-#   3. MemberLoginRequest      -> POST /member/login (returning members)
-class MemberCheckCodeRequest(BaseModel):
-    code: str
-    gym: str | None = None
-
-
-class MemberSetPasswordRequest(BaseModel):
-    code: str
-    gym: str | None = None
-    password: str
-    confirm_password: str
-
-
+# ── Member auth (login_code only) ────────────────────────────────────────────
+# A single step, scoped by (gym, login_code) — see main.py's POST
+# /member/login. The 8-digit code (gym-issued, from gym-dashboard's "Add
+# Member" flow) is the only credential; there is no member password anymore.
 class MemberLoginRequest(BaseModel):
     code: str
     gym: str | None = None
-    password: str
 
 
 class GenerateRequest(BaseModel):

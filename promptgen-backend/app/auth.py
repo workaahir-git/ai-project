@@ -1,7 +1,6 @@
 import time
 import uuid
 
-import bcrypt
 from fastapi import HTTPException, status
 from jose import jwt, JWTError
 
@@ -20,11 +19,10 @@ bearer_scheme_error_hint = (
 #
 # That signup flow has been removed. The real, intended member-identity
 # path is: a gym admin adds a member in gym-dashboard, which generates an
-# 8-digit `login_code` on the `members` row. The member enters that code,
-# plus a password (added in Phase 2 — see /member/login and
-# /member/set-password in main.py), which looks the row up directly —
-# no Supabase Auth user is ever created for a member. So there is nothing
-# to verify against Supabase's JWKS anymore.
+# 8-digit `login_code` on the `members` row. The member enters that code
+# (see /member/login in main.py), which looks the row up directly — no
+# Supabase Auth user is ever created for a member. So there is nothing to
+# verify against Supabase's JWKS anymore.
 #
 # Instead, this app now signs its own short-lived-ish HS256 tokens keyed by
 # MEMBER_SESSION_SECRET. The token's only job is "prove you're the member
@@ -54,7 +52,7 @@ def issue_member_token(member_id: str, gym_id: str | None) -> str:
         "exp": now + _TOKEN_TTL_SECONDS,
         # A random jti isn't checked against a revocation list anywhere
         # (no such table exists yet) — noted as a follow-up gap, same
-        # category as the missing rate-limit on /member/login and /member/set-password.
+        # category as the missing rate-limit on /member/login.
         "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.member_session_secret, algorithm=_ALG)
@@ -80,32 +78,3 @@ def verify_member_token(token: str) -> dict:
         )
     return payload
 
-
-# ── Member password hashing (Phase 2) ───────────────────────────────────────
-# Phase 1 (the code-login fix already in this repo) authenticated members by
-# `login_code` alone. The project decision for Phase 2 is: the code identifies
-# WHICH member is logging in, and a password — set by the member on their
-# first login — is what actually proves it's them. A member row created by
-# gym-dashboard's "Add Member" has `login_code` but no `password_hash` (that
-# column starts NULL — gym-dashboard was intentionally not touched to add
-# it). NULL `password_hash` is exactly how "first login, no password yet" is
-# detected; see `find_member_by_login_code` callers in main.py.
-#
-# bcrypt truncates/ignores input past 72 bytes by design — not handled
-# specially here since member passwords are short, human-typed strings, not
-# machine-generated secrets that could realistically hit that length.
-_BCRYPT_ROUNDS = 12
-
-
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)
-    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
-    except (ValueError, TypeError):
-        # Malformed/empty hash stored somehow — treat as "does not match"
-        # rather than raising, so a bad row can't 500 the login endpoint.
-        return False

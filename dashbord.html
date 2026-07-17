@@ -102,9 +102,8 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
   }
 
   // The member's identity is this app's own session token, issued by
-  // POST /member/login (or /member/set-password on first login) after the
-  // member enters their gym's 8-digit code and password (see
-  // login.html). There is no Supabase Auth session anymore — members
+  // POST /member/login after the member enters their gym's 8-digit code
+  // (see login.html). There is no Supabase Auth session anymore — members
   // never sign up through Supabase at all.
   window.__getAccessToken = async () => localStorage.getItem('memberToken')
 
