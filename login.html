@@ -287,7 +287,7 @@
 <script>
   // Fire-and-forget: wake up the Render backend the instant this page loads,
   // so it's hopefully warm by the time the user logs in.
-  const BACKEND_BASE = 'https://ai-project-login.onrender.com/';
+  const BACKEND_BASE = 'https://ai-project-login.onrender.com';
   fetch(BACKEND_BASE + '/health').catch(() => {
     // Silently ignore errors — this is just a best-effort warm-up ping.
   });
