@@ -118,7 +118,7 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
   // re-filling the form, and it keeps their answer consistent instead of
   // risking a different plan on a second generation.
   try {
-    const res = await fetch('https://ai-project-login.onrender.com', {
+    const res = await fetch('https://ai-project-login.onrender.com/api/my-plan', {
       headers: { Authorization: `Bearer ${memberToken}`, ...window.__gymHeaders() }
     })
     if (res.ok) {
@@ -166,7 +166,7 @@ pre { white-space: pre-wrap; background: #0f0a1c; color: var(--fg); border: 1px 
     btn.textContent = 'Resetting…'
     try {
       const token = await window.__getAccessToken()
-      const res = await fetch('https://ai-project-login.onrender.com', {
+      const res = await fetch('https://ai-project-login.onrender.com/api/reset-plan', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, ...window.__gymHeaders() }
       })

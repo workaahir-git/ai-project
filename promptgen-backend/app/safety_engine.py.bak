@@ -32,8 +32,6 @@ WHY THIS EXISTS AS ITS OWN MODULE
 
 from __future__ import annotations
 
-from app.text_matching import text_has_unnegated_keyword as _text_has_unnegated_keyword
-
 
 # ── EMERGENCY SYMPTOMS (File 12 "Emergency symptom list") ───────────────────
 # If ANY of these appear, we NEVER generate a workout — no tier, no template,
@@ -65,38 +63,9 @@ ACUTE_PAIN_KEYWORDS = (
 _IGNORABLE_NOTES = {"", "none", "n/a", "na", "no", "nil", "nothing"}
 
 
-def _contains_any(text: str, keywords: tuple) -> list:
-    """
-    BUGFIX (found during Engine 40/43 integration audit) — flagged here
-    with more care than the same fix elsewhere, since this one gates a
-    hard block (gate["action"] == "block" -> workout generation refused
-    entirely, no LLM call, no plan saved — see main.py).
-
-    Plain substring matching meant a completely healthy member writing the
-    normal, expected intake disclosure "no chest pain, no heart disease,
-    not pregnant" — i.e. answering the form correctly — matched
-    EMERGENCY_KEYWORDS/HIGH_RISK_KEYWORDS and got fully blocked from ever
-    generating a plan. That's a near-certain, high-frequency failure for
-    any real user (this is exactly how people write a negative medical
-    disclosure), not an edge case.
-
-    The tradeoff: could this fix cause a genuine emergency to be MISSED
-    (e.g. someone typing "no, I do have chest pain" with the negation word
-    landing right before the keyword)? In principle yes, if a real
-    emergency were phrased with a negation word immediately adjacent to
-    the symptom. But `medical_notes` is an ONBOARDING INTAKE FIELD filled
-    out ahead of time, not a live symptom-reporting channel someone is
-    typing into mid-emergency — and that specific negation-adjacent
-    phrasing ("no, I have chest pain") is an unusual sentence construction
-    even then. Given the near-certainty of the false-positive failure mode
-    against the low plausibility of the false-negative one, fixing this is
-    the right call for this app's actual use case — but it's a judgment
-    call, flagged explicitly rather than applied silently, since a wrong
-    call here is more serious than the same fix in progression_engine.py
-    or exercise_database.py.
-    """
+def _contains_any(text: str, keywords: tuple[str, ...]) -> list[str]:
     text = (text or "").lower()
-    return [k for k in keywords if _text_has_unnegated_keyword(text, (k,))]
+    return [k for k in keywords if k in text]
 
 
 def _parse_age(profile: dict) -> tuple[int, list[str]]:

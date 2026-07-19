@@ -235,6 +235,23 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
 .ex-head-main{flex:1;min-width:0}
 .ex-name{font-size:14px;font-weight:700;color:#e8e8e8}
 .ex-muscle{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:1px}
+.ex-load-note{font-size:11.5px;color:#a78bfa;font-weight:500;margin-top:4px;line-height:1.4}
+.ex-load-note-warn{color:#f59e0b}
+.ex-final-load{font-size:11.5px;color:#8983a8;margin-top:2px;line-height:1.4}
+.ex-final-load strong{color:#c084fc;font-weight:600}
+.ex-warmup-ramp{font-size:11px;color:var(--muted);margin-top:6px;padding:7px 10px;background:var(--bg3);border-radius:7px;line-height:1.5}
+.ex-warmup-ramp strong{color:#bbb;font-weight:600}
+.ex-adapt-note{font-size:11.5px;font-weight:500;margin-top:4px;line-height:1.4;color:#7dd3fc}
+.ex-adapt-note.ex-attention{color:#f87171}
+.day-conflict-note{margin-top:10px;background:var(--bg3);border-left:2px solid #f59e0b;border-radius:0 8px 8px 0;padding:9px 13px;font-size:11.5px;color:var(--muted);line-height:1.55}
+.day-conflict-note strong{color:#f59e0b;font-weight:600}
+.insight-item{padding:12px 14px;background:var(--bg3);border-radius:10px;margin-bottom:10px;font-size:12.5px;color:var(--muted);line-height:1.55}
+.insight-item:last-child{margin-bottom:0}
+.insight-item-title{font-size:11px;font-weight:700;color:#ddd;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.insight-badge{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--bg4);color:#c084fc;margin-right:8px;letter-spacing:.3px}
+.insight-badge.warn{background:#f59e0b22;color:#f59e0b}
+.insight-badge.ok{background:#22c55e22;color:#4ade80}
+.insight-empty{font-size:12px;color:var(--dim);font-style:italic;padding:16px;text-align:center}
 .ex-meta-right{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:nowrap}
 .ex-sets-total{background:var(--lime-glow);border:1px solid var(--lime);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--lime);white-space:nowrap}
 .ex-status{font-size:9.5px;font-weight:700;color:var(--muted);white-space:nowrap;letter-spacing:.3px}
@@ -464,6 +481,10 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         <span class="sb-label">Progress</span>
       </button>
+      <button class="sb-item" data-sec="insights">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span class="sb-label">Coaching Insights</span>
+      </button>
       <button class="sb-item" data-sec="checkin" id="checkinNavBtn" style="display:none">
         <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         <span class="sb-label">Biweekly Check-in</span>
@@ -593,6 +614,17 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
                 <div class="ex-head-main">
                   <div class="ex-name">{{ ex.name }}</div>
                   <div class="ex-muscle">{{ ex.muscle }}</div>
+                  {% if ex._load_note %}
+                  <div class="ex-load-note{% if ex._load_action == 'flag_pain' %} ex-load-note-warn{% endif %}">{{ ex._load_note }}</div>
+                  {% endif %}
+                  {% if ex._final_load_kg %}
+                  <div class="ex-final-load">Suggested working weight: <strong>{{ ex._final_load_kg }} kg</strong>{% if ex._load_basis %} ({{ ex._load_basis.replace('_', ' ') }}){% endif %}</div>
+                  {% endif %}
+                  {% if ex._intra_cycle_adaptation %}
+                  <div class="ex-adapt-note{% if ex._requires_attention %} ex-attention{% endif %}">
+                    {% if ex._requires_attention %}⚠ {% endif %}{{ ex._intra_cycle_adaptation.replace('_', ' ') | capitalize }}
+                  </div>
+                  {% endif %}
                 </div>
                 <div class="ex-meta-right">
                   <span class="ex-sets-total">{{ ex.sets }} × {{ ex.reps }}</span>
@@ -605,6 +637,12 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
               <div class="ex-body">
                 <div class="ex-body-inner">
                   <div class="ex-body-content">
+                    {% if ex._warmup_ramp and ex._warmup_ramp.ramp_sets %}
+                    <div class="ex-warmup-ramp">
+                      <strong>Warm-up ramp:</strong>
+                      {% for rs in ex._warmup_ramp.ramp_sets %}{{ rs.weight_kg }}kg×{{ rs.reps }}{% if not loop.last %} → {% endif %}{% endfor %}
+                    </div>
+                    {% endif %}
                     <div class="set-grid">
                       {% for i in range(ex.sets) %}
                       <div class="set-cell"
@@ -641,6 +679,9 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
               </div>
             </div>
             {% endfor %}
+            {% if day._validation and day._validation.warnings %}
+            <div class="day-conflict-note"><strong>Note:</strong> {{ day._validation.warnings | join(' ') }}</div>
+            {% endif %}
             <div class="safety-note"><strong>Safety:</strong> {{ day.safety }}</div>
           </div>
           {% endif %}
@@ -713,6 +754,75 @@ html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior
           {% endfor %}
         </div>
         {% endfor %}
+      </div>
+
+      <!-- ══════════ COACHING INSIGHTS — real engine output that was ══════════
+           computed every generation since this app's early sessions but had
+           nowhere to render until now. Every binding below uses the exact
+           field names each engine actually returns (checked against real
+           calls, not guessed) — .note is each engine's own plain-language
+           summary, used as the primary text; the categorical field next to
+           it (fatigue_zone, session_decision, etc.) becomes the badge. -->
+      <div class="section" id="sec-insights">
+        {% if explanations %}
+        <div class="sec-label">Why your plan looks this way</div>
+        <div class="card">
+          {% for exp in explanations %}
+          <div class="insight-item">
+            <div class="insight-item-title">{{ exp.recommendation }}</div>
+            {{ exp.user_message }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="sec-label">Recovery & readiness</div>
+        <div class="card">
+          {% if fatigue %}
+          <div class="insight-item">
+            <span class="insight-badge{% if fatigue.fatigue_zone in ('high','very_high') %} warn{% else %} ok{% endif %}">{{ fatigue.fatigue_zone | capitalize }} fatigue</span>
+            {{ fatigue.note }}
+          </div>
+          {% endif %}
+          {% if autoregulation %}
+          <div class="insight-item">
+            <span class="insight-badge{% if autoregulation.session_decision != 'proceed' %} warn{% else %} ok{% endif %}">{{ autoregulation.session_decision | capitalize }}</span>
+            {{ autoregulation.note }}
+          </div>
+          {% endif %}
+          {% if not fatigue and not autoregulation %}
+          <div class="insight-empty">No readiness data yet — this fills in once you've logged a few workouts.</div>
+          {% endif %}
+        </div>
+
+        <div class="sec-label">Progress trajectory</div>
+        <div class="card">
+          {% if adaptation %}
+          <div class="insight-item">
+            <span class="insight-badge{% if adaptation.adaptation_status == 'insufficient_data' %} warn{% endif %}">{{ adaptation.adaptation_status.replace('_',' ') | capitalize }}</span>
+            {{ adaptation.note }}
+          </div>
+          {% endif %}
+          {% if prediction %}
+          <div class="insight-item">
+            <span class="insight-badge">{{ prediction.recommendation | capitalize }}</span>
+            {{ prediction.note }}
+          </div>
+          {% endif %}
+          {% if not adaptation and not prediction %}
+          <div class="insight-empty">Not enough completed cycles yet to project a trend.</div>
+          {% endif %}
+        </div>
+
+        {% if diet.phase %}
+        <div class="sec-label">Diet phase reasoning</div>
+        <div class="card">
+          <div class="insight-item">
+            <span class="insight-badge">{{ diet.phase.phase | capitalize }}</span>
+            Target {{ diet.phase.target_kcal }} kcal/day, {{ diet.phase.macro_split.protein_g }}g protein — based on your current recovery capacity and goal.
+          </div>
+        </div>
+        {% endif %}
       </div>
 
       <!-- ══════════ BIWEEKLY CHECK-IN (Phase 6) ══════════ -->
@@ -1332,14 +1442,16 @@ document.querySelectorAll('.ex-stars').forEach(group => {
   const successCard = document.getElementById('checkinSuccessCard');
   if (!navBtn) return;
 
+  // Members authenticate with the backend-issued memberToken (see
+  // login.html / dashbord.html), not Supabase Auth — members never sign up
+  // through Supabase at all post-refactor. This used to call
+  // supabase.auth.getSession(), which always returned null for members,
+  // silently short-circuiting checkEligibility() below before it ever
+  // reached /api/checkin/eligibility. Kept the same `{ access_token }`
+  // shape so the other call sites didn't need to change.
   async function getSession() {
-    const { createClient } = await import('https://esm.sh/@supabase/supabase-js');
-    const supabase = createClient(
-      'https://yabclxadadynmprymcns.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhYmNseGFkYWR5bm1wcnltY25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Njg4NzIsImV4cCI6MjA5ODA0NDg3Mn0.e2IwBxrW-NbMIqqWFZb8gnh5T95vlDwS-h2FhlWRb1k'
-    );
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
+    const token = localStorage.getItem('memberToken');
+    return token ? { access_token: token } : null;
   }
 
   async function checkEligibility() {
@@ -1381,6 +1493,9 @@ document.querySelectorAll('.ex-stars').forEach(group => {
   }
 
   checkEligibility();
+  // Re-check periodically so the nav item/form appear once eligible
+  // without the member having to reload the page.
+  setInterval(checkEligibility, 30000);
 
   const form = document.getElementById('checkinForm');
   if (!form) return;

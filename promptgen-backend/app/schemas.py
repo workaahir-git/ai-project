@@ -72,6 +72,13 @@ class SetFeedbackSubmission(BaseModel):
 
 class ExerciseFeedbackSubmission(BaseModel):
     entries: list[ExerciseFeedbackEntry]
+class ReadinessCheckinSubmission(BaseModel):
+    day_index:    int
+    rating:       int   # 1-5, pre-session self-report
+    notes:        str | None = None
+    cycle_number: int = 1
+
+
 class CheckinSubmission(BaseModel):
     recovery:   str   # excellent | good | average | poor
     difficulty: str   # too_easy | easy | just_right | hard | too_hard

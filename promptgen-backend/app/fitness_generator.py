@@ -48,6 +48,18 @@ from .exercise_database import (
 # exercise_database.py's own select_day_exercises() is left in place and
 # untouched for any other caller that still imports it directly.
 from .exercise_selector import select_day_exercises
+# Wired in this session: per-exercise load adjustment from last-cycle
+# feedback (workout_set_feedback / workout_exercise_feedback tables).
+# Fails conservative internally ({"action": "baseline", ...}) on any
+# missing member_id, missing data, or Supabase error — never raises,
+# so a lookup failure here can't block plan generation.
+from .load_adjustment_engine import get_adjustment as get_load_adjustment
+# Wired this session: joint-stress conflict detection/reorder + pairing
+# nudge (Engines 14 & 13). Runs on the post-repair pick list, right before
+# it's locked in for the day — pure reorder + note-attachment, never drops
+# or replaces an exercise (see conflict_engine.py's own docstring).
+from . import conflict_engine
+from . import knowledge_base as _kb43
 from .validator import (
     validate_and_repair_day,
     validate_week,
@@ -63,6 +75,14 @@ from . import knowledge_retriever as kb
 from . import trainer_review as trainer_review_mod
 from . import review_validation as review_validation_mod
 from . import allergy_engine
+# Added to remove the first Gemini call entirely (see
+# build_deterministic_plan_data() below, right before enforce_schema) —
+# both are real, already-tested KB/content-bank engines that were built
+# but sitting unused until now.
+from . import diet_engine
+from . import recovery_tips_engine
+from . import load_prescription_engine
+from . import warmup_ramp_engine
 # NOTE on progression.py: attempted to source per-exercise rest from
 # progression.py's rest_for_exercise_type() (compound vs isolation bands),
 # but that function is keyed by intensity band only, not by goal — there's
@@ -872,6 +892,12 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
     # `None` here (no reassessment yet, or the optional load failed) means
     # every branch below behaves exactly as it did before this hook existed.
     progression_context = profile.get("_progression_context")
+    # Additive, same convention as _progression_context above. Both are
+    # optional — None/missing member_id means get_load_adjustment() below
+    # returns {"action": "baseline", ...} for every exercise, i.e. exactly
+    # today's behavior (no adjustment notes attached).
+    _member_id = profile.get("_member_id")
+    _cycle_number = profile.get("_cycle_number")
     if progression_context and progression_context.get("pain_flags"):
         # Fold biweekly check-in pain flags into the same free-text injury
         # detection notes_raw already goes through (exercise_selector.py's
@@ -936,6 +962,20 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
         day_warnings = list(repair_result["warnings"])
         day_warnings.extend(check_condition_pattern_conflicts(picks, condition_flags))
 
+        # Engine 14/13 — joint-stress conflict reorder + pairing nudge.
+        # conflict_engine needs 'exercise_id' / 'movement_id' keys; pull the
+        # real movement_id from the KB (ground truth) when the pick's
+        # _exercise_id resolves there, falling back to exercise_selector's
+        # own "pattern" tag (a separate, coarser taxonomy) only when it
+        # doesn't. Never raises internally and never drops an exercise —
+        # worst case this is a no-op reorder.
+        for p in picks:
+            p["exercise_id"] = p.get("_exercise_id")
+            kb_entry = _kb43.get_exercise(p["exercise_id"]) if p["exercise_id"] else None
+            p["movement_id"] = (kb_entry or {}).get("movement_id") or p.get("pattern")
+        picks, conflict_notes = conflict_engine.optimize_day_order(picks)
+        day_warnings.extend(conflict_notes)
+
         week_exercises_by_day.append(picks)
 
         # Sets/reps still come from 2_Programming_Rules.md §1 (goal-based),
@@ -945,17 +985,53 @@ def build_deterministic_workout_days(profile: dict, weekly_template: list, vol: 
         goal_prescription = sets_reps_rest_for_goal(goal)
         exercises = []
         for p in picks:
-            exercises.append({
+            adj = get_load_adjustment(
+                _member_id, p["name"], p.get("_exercise_id"), _cycle_number,
+            )
+            entry = {
                 "name": p["name"],
+                "exercise_id": p.get("_exercise_id"),
                 "muscle": p["muscle"].title(),
                 "sets": goal_prescription["sets_per_exercise"],
                 "reps": goal_prescription["reps"] + " reps",
                 "rest": _rest_string_for_slot(goal, p.get("slot", "isolation")),
                 "tempo_or_cue": p["cue"],
-            })
+            }
+            if adj["action"] != "baseline":
+                entry["_load_action"] = adj["action"]
+                entry["_load_note"] = adj["note"]
+            if adj.get("last_weight_kg") is not None:
+                entry["_last_weight_kg"] = adj["last_weight_kg"]
+
+            # Engine 21 (Load Prescription) — pure computation from the
+            # adj already computed above, no re-fetch (compute_final_load's
+            # own docstring: "fitness_generator.py's day-building loop
+            # should call compute_final_load() directly instead" of the
+            # prescribe_load() convenience wrapper). readiness/recovery/
+            # plateau profiles are None at generation time (no day_index /
+            # per-exercise plateau context here yet) — degrades to the
+            # engine's own documented no-modifier baseline, same as every
+            # other engine's None-safe convention in this app.
+            load_profile = load_prescription_engine.compute_final_load(
+                adj, p.get("_exercise_id"), p["name"], goal,
+            )
+            if load_profile is not None:
+                entry["_final_load_kg"] = load_profile["final_load"]
+                entry["_load_basis"] = load_profile["basis"]
+
+            # Engine 40 (Warm-up Ramp) — needs the exercise's own
+            # requires/slot tags (on `p`, not `entry`) plus the working
+            # weight just computed above (None-safe: RPE-anchored fallback
+            # ramp when no numeric weight exists yet, per this engine's
+            # own bugfix note on machine/cable exercises with no baseline).
+            working_weight = load_profile["final_load"] if load_profile else None
+            ramp = warmup_ramp_engine.build_warmup_ramp(p, working_weight)
+            entry["_warmup_ramp"] = ramp
+            exercises.append(entry)
 
         day_entry = {
             "is_rest": False,
+            "_token": token,
             "warmup_exercises": WARMUP_LIBRARY.get(token, WARMUP_LIBRARY.get(_nearest_warmup_category(token), [])),
             "exercises": exercises,
             "safety": _SAFETY_DEFAULT_BY_TOKEN.get(token, "Controlled tempo, full range of motion on every rep."),
@@ -1888,6 +1964,115 @@ _RECOVERY_DEFAULT = {
         },
     ],
 }
+
+
+def build_deterministic_plan_data(profile: dict) -> dict:
+    """Replaces the first Gemini call entirely. Everything it used to
+    generate — user/plan macro numbers, diet.meals, and the recovery
+    section — is now assembled here from already-tested deterministic
+    engines instead of free-generated text:
+
+      - user/plan: _calculate_macros() already computed all of this in
+        real Python (Mifflin-St Jeor BMR/TDEE, protein bands, calorie
+        phase) — the old first Gemini call was only ever asked to echo
+        these exact numbers back into the JSON schema, never to compute
+        them itself. So there's nothing left for an LLM to add here.
+      - diet.meals: diet_engine.build_diet_meals() — its own docstring
+        calls it "a drop-in replacement for what Gemini used to generate
+        for this part of the schema." Guarantees exact macro arithmetic
+        per option (an LLM can silently get kcal/protein/carb/fat sums
+        wrong; this can't, they're computed from real per-ingredient
+        data), respects diet tier/allergies/budget from real KB data.
+      - recovery: recovery_tips_engine.build_recovery_section() — a
+        curated tip bank with deterministic (member_id, cycle_number)
+        rotation, so repeat cycles for the same member see genuine
+        variety instead of one fixed static block, without needing an
+        LLM call to get that variety.
+
+    The second Gemini call (Trainer Review, in build_and_review_workout_days)
+    is UNCHANGED — this only removes the first call. Trainer Review is a
+    genuinely different kind of task (open-ended holistic safety review
+    across an already-deterministic workout) that isn't just "assemble
+    already-computed numbers," so it's kept as-is rather than folded in
+    here. See HANDOFF.md for the fuller reasoning on why that one stays.
+
+    Returns the same dict shape enforce_schema()/render_dashboard() expect
+    (user/plan/diet/recovery keys) — this is meant to be a straight
+    replacement for `parse_llm_json(raw)` in main.py's _run(), with
+    enforce_schema() still run on the result afterward exactly as before
+    (so allergy_engine's post-hoc safety re-check and every other
+    enforce_schema guarantee still applies unconditionally, same as when
+    the data came from an LLM).
+    """
+    activity_key = profile.get("activity_key", "moderate")
+    profile["activity_level_factor"] = ACTIVITY_FACTOR.get(activity_key, 1.55)
+    m = _calculate_macros(profile)
+
+    goal = profile.get("goal", "fat loss")
+    goal_lower = goal.lower()
+    is_recovery_goal = any(
+        t in goal_lower for t in ("recovery", "recover", "deload", "injury", "rehab")
+    )
+    if "fat loss" in goal_lower or "weight loss" in goal_lower or "cut" in goal_lower:
+        goal_label = "Fat Loss Plan"
+    elif is_recovery_goal:
+        goal_label = "Recovery Plan"
+    elif "muscle" in goal_lower or "bulk" in goal_lower or "gain" in goal_lower:
+        goal_label = "Muscle Gain Plan"
+    elif "maintain" in goal_lower:
+        goal_label = "Maintenance Plan"
+    else:
+        goal_label = "Fat Loss Plan"
+
+    weight = profile.get("current_weight_kg", 70)
+    target = profile.get("target_weight_kg", "—")
+    try:
+        weight_to_lose = f"{abs(float(weight) - float(target)):.1f} kg"
+    except (TypeError, ValueError):
+        weight_to_lose = "—"
+
+    allergy_set = diet_engine.parse_allergies(profile.get("allergies", "none"))
+    budget_tier = diet_engine.resolve_budget_tier(profile.get("budget", "medium"))
+    # KNOWN LIMITATION, not silently worked around: build_diet_meals()
+    # always returns exactly 5 meal slots — it has no meals_per_day
+    # parameter, unlike the old LLM-based path which was (loosely) steered
+    # toward the requested count via the prompt. If profile["meals_per_day"]
+    # isn't 5, enforce_schema()'s existing _meal_count_warning check (see
+    # below in this file) will correctly flag the mismatch — surfaced
+    # honestly rather than hidden. Supporting variable meal counts would
+    # mean genuinely extending diet_engine's slot-merging logic, not a
+    # quick parameter add; left as a real follow-up, not bundled into this
+    # change.
+    meals = diet_engine.build_diet_meals(
+        daily_kcal=m["target_kcal"],
+        daily_protein_g=m["protein_g_mid"],
+        diet_pref_raw=profile.get("diet_pref", "non-vegetarian"),
+        allergy_set=allergy_set,
+        budget_tier=budget_tier,
+    )
+
+    recovery = recovery_tips_engine.build_recovery_section(
+        profile, cycle_number=profile.get("_cycle_number"),
+    )
+
+    return {
+        "user": {
+            "name": profile.get("name", "User"),
+            "current_weight": profile.get("current_weight_kg", 0),
+            "target_weight": profile.get("target_weight_kg", "—"),
+        },
+        "plan": {
+            "goal_label": goal_label,
+            "daily_calories": m["target_kcal"],
+            "protein_range": f"{m['protein_g_low']}–{m['protein_g_high']}g",
+            "daily_protein_g": m["protein_g_mid"],
+            "weight_to_lose": weight_to_lose,
+            "calorie_phase": m["phase_label"],
+        },
+        "workout": {},
+        "diet": {"meals": meals},
+        "recovery": recovery,
+    }
 
 
 def enforce_schema(data: dict, profile: dict | None = None) -> dict:

@@ -379,6 +379,7 @@ def select_day_exercises_detailed(
             "cue": choice["cue"],
             "pattern": pattern,
             "kb_context": get_kb_context(choice["name"]),
+            "_exercise_id": choice.get("_exercise_id"),
         })
         patterns_used.setdefault(m, []).append(pattern)
 
@@ -411,6 +412,7 @@ def select_day_exercises_detailed(
                 "cue": choice["cue"],
                 "pattern": pattern,
                 "kb_context": get_kb_context(choice["name"]),
+                "_exercise_id": choice.get("_exercise_id"),
             })
             patterns_used.setdefault(m, []).append(pattern)
 
